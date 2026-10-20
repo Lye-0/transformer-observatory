@@ -170,3 +170,16 @@ def test_tensor_scope_and_causal_mask_are_explicit(tmp_path):
     )
     assert len(writer.manifest["stages"]) == 9
     assert all(c["passed"] for c in adapter.checks)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA GPU required")
+def test_bfloat16_cuda_accumulation_matches_cpu_reference():
+    from transformer_observatory.runtime import configure_runtime
+
+    configure_runtime()
+    rng = torch.Generator().manual_seed(1729)
+    x = (torch.randn(5, 3072, generator=rng) * 8).bfloat16()
+    weight = torch.randn(1024, 3072, generator=rng).bfloat16()
+    cpu_result = torch.nn.functional.linear(x, weight).float()
+    gpu_result = torch.nn.functional.linear(x.cuda(), weight.cuda()).cpu().float()
+    torch.testing.assert_close(cpu_result, gpu_result, atol=0.05, rtol=0.04)

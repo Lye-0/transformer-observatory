@@ -189,6 +189,11 @@ class Jobs:
                     python=platform.python_version(),
                     cuda=torch.version.cuda,
                     gpu=torch.cuda.get_device_name() if torch.cuda.is_available() else None,
+                    matmul_precision=dict(
+                        bf16_reduced_precision_reduction=torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction,
+                        fp16_reduced_precision_reduction=torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction,
+                        tf32=torch.backends.cuda.matmul.allow_tf32,
+                    ),
                 ),
                 capture_dtype="float32",
                 capture_backend="pytorch-eager",
