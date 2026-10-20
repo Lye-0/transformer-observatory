@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { api, connect, type Job, type Model } from './api';
 import Explorer from './Explorer';
+import ResearchDesk from './ResearchDesk';
 import { Library, ModelManager, NewAnalysis, Settings } from './Pages';
 
 const stages = ['実行確認', 'モデル準備', '入力処理', '内部解析', '座標変換', '表示準備'];
@@ -38,7 +39,6 @@ export default function App() {
         await reload();
         const jobs = await api<Job[]>('analysis/jobs');
         if (!active) return;
-        setReady(true);
         const running = jobs.find((j) => !terminal.includes(j.state));
         if (running) {
           setJob(running);
@@ -57,6 +57,7 @@ export default function App() {
             }
           }
         }
+        if (active) setReady(true);
       })
       .catch((e) => setError(String(e)));
     return () => {
@@ -88,6 +89,7 @@ export default function App() {
     { id: 'analysis', label: '新しい解析', icon: FlaskConical },
     { id: 'explorer', label: '3D Explorer', icon: Orbit },
     { id: 'library', label: 'Trace Library', icon: Database },
+    { id: 'research', label: 'Research', icon: Activity },
     { id: 'models', label: 'Model Manager', icon: SlidersHorizontal },
     { id: 'settings', label: '設定', icon: SettingsIcon },
   ];
@@ -99,7 +101,7 @@ export default function App() {
           className="brand"
           onClick={(e) => {
             e.preventDefault();
-            setNav('analysis');
+            if (ready) setNav('analysis');
           }}
           aria-label="Transformer Observatory ホーム"
         >
@@ -115,8 +117,9 @@ export default function App() {
           {navigation.map((item) => (
             <button
               key={item.id}
+              aria-label={item.label}
               className={nav === item.id ? 'nav-item active' : 'nav-item'}
-              disabled={item.id === 'explorer' && !traceId}
+              disabled={!ready || (item.id === 'explorer' && !traceId)}
               onClick={() => setNav(item.id)}
             >
               <item.icon size={18} />
@@ -193,6 +196,7 @@ export default function App() {
             </div>
             {nav === 'models' && <ModelManager models={models} reload={reload} onError={setError} />}
             {nav === 'library' && <Library onOpen={open} onError={setError} />}
+            {nav === 'research' && <ResearchDesk models={models} onError={setError} />}
             {nav === 'settings' && <Settings onError={setError} />}
             {nav === 'explorer' && traceId && (
               <Explorer

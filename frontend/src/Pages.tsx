@@ -524,7 +524,15 @@ export function ModelManager({
               <span className="tag">LOCAL</span>
             </div>
             <div className="capabilities">
-              {['residual', 'attention', 'mlp', 'generation', 'quantization'].map((key) => (
+              {[
+                'residual',
+                'attention',
+                'mlp',
+                'generation',
+                'quantization',
+                'interventions',
+                'tuned_lens',
+              ].map((key) => (
                 <div key={key}>
                   <span>{key}</span>
                   <b className={m.capabilities[key] === '検証済み' ? 'good' : 'muted'}>

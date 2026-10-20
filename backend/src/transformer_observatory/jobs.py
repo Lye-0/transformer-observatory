@@ -14,7 +14,7 @@ import transformers
 
 from .analysis import project_trace
 from .capture import Cancelled, Capture
-from .models import TINY_ID, load_model, load_tokenizer, tiny_registration, tokenize
+from .models import TINY_ID, capabilities, load_model, load_tokenizer, tiny_registration, tokenize
 from .runtime import configure_runtime
 from .schema import TERMINAL, AnalysisRequest
 from .storage import TraceWriter
@@ -29,15 +29,23 @@ class Jobs:
         self.closed = False
 
     def models(self):
-        return [tiny_registration(), *self.store.list("models")]
+        return [self.current_capabilities(m) for m in [tiny_registration(), *self.store.list("models")]]
+
+    def current_capabilities(self, model):
+        current = capabilities(model["architecture"])
+        for key in ["interventions", "tuned_lens"]:
+            model["capabilities"][key] = current[key]
+        if any(lens["model_fingerprint"] == model["fingerprint"] for lens in self.store.list("lenses")):
+            model["capabilities"]["tuned_lens"] = "学習済みローカル重みを登録済み"
+        return model
 
     def model(self, model_id):
         if model_id == TINY_ID:
-            return tiny_registration()
+            return self.current_capabilities(tiny_registration())
         registration = self.store.get("models", model_id)
         if not registration:
             raise ValueError("モデルが登録されていません")
-        return registration
+        return self.current_capabilities(registration)
 
     def preflight(self, request):
         m = self.model(request.model_id)
@@ -369,7 +377,7 @@ class Jobs:
             event.set()
         self.executor.shutdown(wait=True, cancel_futures=False)
 
-    def lens(self, trace_id, stage, token, step):
+    def lens(self, trace_id, stage, token, step, lens_id=None):
         m = self.store.manifest(trace_id)
         r = next(
             (
@@ -397,12 +405,23 @@ class Jobs:
             tokenizer = load_tokenizer(registration)
             x = np.asarray(self.store.load(trace_id, r)[r["positions"].index(token)]).copy()
             x = torch.tensor(x, device=device, dtype=dtype)
+            lens_metadata = None
+            if lens_id:
+                from .lenses import apply_lens
+
+                lens_registration = self.store.get("lenses", lens_id)
+                if not lens_registration:
+                    raise ValueError("学習済みLensが登録されていません")
+                x, lens_metadata = apply_lens(self.store, lens_registration, registration, stage, x)
             norm = model.transformer.ln_f if model.config.model_type == "gpt2" else model.model.norm
             with torch.inference_mode():
                 probabilities = model.lm_head(norm(x)).float().softmax(-1)
                 values, indices = probabilities.topk(10)
             return dict(
-                method="Logit Lens (final norm + LM head)",
+                method="Tuned Lens (trained residual affine + final norm + LM head)"
+                if lens_id
+                else "Logit Lens (final norm + LM head)",
+                lens=lens_metadata,
                 device=device,
                 dtype=str(dtype),
                 candidates=[

@@ -80,6 +80,36 @@ class ComparisonRequest(BaseModel):
     right: str
 
 
+class StudyRequest(BaseModel):
+    kind: Literal["intervention", "statistics", "tsne"]
+    trace_ids: list[str] = Field(min_length=1, max_length=20)
+    mode: Literal["residual_patch", "head_ablation", "mlp_ablation"] = "residual_patch"
+    layer: int = Field(default=0, ge=0, le=255)
+    head: int = Field(default=0, ge=0, le=255)
+    stage: str = "embedding"
+    positions: list[int] = Field(default_factory=list, max_length=256)
+    source_positions: list[int] = Field(default_factory=list, max_length=256)
+    readout_position: int | None = Field(default=None, ge=0)
+    token_id: int | None = Field(default=None, ge=0)
+    strength: float = Field(default=1, ge=0, le=1)
+    perplexity: float = Field(default=20, ge=1, le=100)
+    seed: int = Field(default=42, ge=0, le=2**32 - 1)
+
+    @model_validator(mode="after")
+    def valid_positions(self):
+        if any(p < 0 for p in self.positions + self.source_positions) or len(set(self.positions)) != len(
+            self.positions
+        ):
+            raise ValueError("介入先の位置は重複しない0以上の番号を指定してください")
+        return self
+
+
+class LensRegistration(BaseModel):
+    model_id: str
+    path: str = Field(min_length=1, max_length=4096)
+    name: str = Field(default="", max_length=160)
+
+
 class SettingsUpdate(BaseModel):
     retention_days: int = Field(ge=1, le=3650)
     cache_limit_gib: float = Field(ge=0.1, le=4096)

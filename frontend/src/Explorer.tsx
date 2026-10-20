@@ -407,6 +407,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                 step={token?.step || 0}
                 level={m.level}
                 onError={onError}
+                fingerprint={m.model.fingerprint}
               />
             ) : (
               <>
@@ -814,6 +815,7 @@ function Prediction({
   step,
   level,
   onError,
+  fingerprint,
 }: {
   id: string;
   stage: string;
@@ -821,25 +823,67 @@ function Prediction({
   step: number;
   level: number;
   onError: (s: string) => void;
+  fingerprint: string;
 }) {
   const [result, setResult] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const [lenses, setLenses] = useState<any[]>([]);
+  const [lensId, setLensId] = useState('');
+  const current = useRef('');
+  current.current = `${id}:${stage}:${token}:${lensId}`;
+  useEffect(() => {
+    let active = true;
+    api<any[]>('research/lenses')
+      .then((items) => {
+        if (active) setLenses(items.filter((l) => l.model_fingerprint === fingerprint));
+      })
+      .catch((e) => onError(String(e)));
+    return () => {
+      active = false;
+    };
+  }, [fingerprint]);
   useEffect(() => {
     setResult(null);
-  }, [id, stage, token]);
+  }, [id, stage, token, lensId]);
   return (
     <>
       <p className="subtle-note">
         Logit Lensは、保存した途中層のResidualに最終NormとLM
         Headを適用した読み出しです。途中層でモデルが実際に出した確率とは異なります。
       </p>
+      <label className="field">
+        読み出し方式
+        <select aria-label="読み出し方式" value={lensId} onChange={(e) => setLensId(e.target.value)}>
+          <option value="">Logit Lens</option>
+          {lenses.map((l) => (
+            <option key={l.id} value={l.id}>
+              Tuned Lens · {l.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {lensId && (
+        <p className="subtle-note">
+          学習済みの層別残差アフィン変換を適用します。学習範囲外での精度は保証しません。EmbeddingとBlock出力に対応します。
+        </p>
+      )}
+      {!lenses.length && (
+        <p className="subtle-note">Tuned LensはResearch画面で学習済み重みを登録すると利用できます。</p>
+      )}
       <button
         className="secondary compact"
-        disabled={level < 2 || busy}
+        disabled={level < 2 || busy || Boolean(lensId && stage.endsWith('.attention'))}
         onClick={async () => {
           setBusy(true);
+          const key = current.current;
           try {
-            setResult(await api(`traces/${id}/lens`, 'POST', { stage, token, step }));
+            const response = await api(`traces/${id}/lens`, 'POST', {
+              stage,
+              token,
+              step,
+              lens_id: lensId || null,
+            });
+            if (current.current === key) setResult(response);
           } catch (e) {
             onError(String(e));
           } finally {
@@ -847,7 +891,7 @@ function Prediction({
           }
         }}
       >
-        {busy ? 'モデルを読み込んで計算中…' : 'Logit Lensを計算'}
+        {busy ? 'モデルを読み込んで計算中…' : lensId ? 'Tuned Lensを計算' : 'Logit Lensを計算'}
       </button>
       {level < 2 && <p className="subtle-note">Level 2以上のResidualが必要です。</p>}
       {result?.candidates.map((c: any) => (

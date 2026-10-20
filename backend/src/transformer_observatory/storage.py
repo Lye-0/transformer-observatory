@@ -71,6 +71,8 @@ class Store:
                 CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS models (id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS settings (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS studies (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS lenses (id TEXT PRIMARY KEY, data TEXT NOT NULL);
             """)
         if not self.get("settings", "main"):
             self.put(
@@ -87,6 +89,13 @@ class Store:
                 job.update(state="failed", error="バックエンドが中断されました。部分トレースを確認できます。")
                 self.put("jobs", job["id"], job)
                 self.mark_incomplete(job["id"], job["error"])
+        for study in self.list("studies"):
+            if study["state"] not in {"completed", "cancelled", "failed"}:
+                study.update(
+                    state="failed",
+                    error="バックエンドが中断されました。確定済み研究レポートは維持されています。",
+                )
+                self.put("studies", study["id"], study)
         self.auto_cleanup()
 
     @contextmanager
@@ -100,7 +109,7 @@ class Store:
             conn.close()
 
     def put(self, table, key, data):
-        assert table in {"traces", "jobs", "models", "settings"}
+        assert table in {"traces", "jobs", "models", "settings", "studies", "lenses"}
         with self.lock, self.db() as db:
             db.execute(
                 f"INSERT OR REPLACE INTO {table} VALUES (?, ?)",
@@ -108,13 +117,13 @@ class Store:
             )
 
     def get(self, table, key):
-        assert table in {"traces", "jobs", "models", "settings"}
+        assert table in {"traces", "jobs", "models", "settings", "studies", "lenses"}
         with self.db() as db:
             row = db.execute(f"SELECT data FROM {table} WHERE id=?", (key,)).fetchone()
         return json.loads(row[0]) if row else None
 
     def list(self, table):
-        assert table in {"traces", "jobs", "models", "settings"}
+        assert table in {"traces", "jobs", "models", "settings", "studies", "lenses"}
         with self.db() as db:
             return [json.loads(r[0]) for r in db.execute(f"SELECT data FROM {table} ORDER BY rowid DESC")]
 
@@ -181,8 +190,7 @@ class Store:
     def retain(self, trace_id, enabled):
         with self.lock:
             m = self.manifest(trace_id)
-            job = self.get("jobs", trace_id)
-            if job and job["state"] not in {"completed", "cancelled", "failed"}:
+            if self.trace_busy(trace_id):
                 raise ValueError("実行中のトレースは保持先へ移動できません")
             if enabled and not m["retained"]:
                 source = self.path(trace_id)
@@ -255,11 +263,18 @@ class Store:
             raise ValueError("テンソルの形状・dtypeがmanifestと一致しません")
         return array
 
+    def trace_busy(self, trace_id):
+        terminal = {"completed", "cancelled", "failed"}
+        job = self.get("jobs", trace_id)
+        return bool(job and job["state"] not in terminal) or any(
+            study["state"] not in terminal and trace_id in study["request"]["trace_ids"]
+            for study in self.list("studies")
+        )
+
     def delete(self, trace_id):
         with self.lock:
             m = self.manifest(trace_id)
-            j = self.get("jobs", trace_id)
-            if m["retained"] or (j and j["state"] not in {"completed", "cancelled", "failed"}):
+            if m["retained"] or self.trace_busy(trace_id):
                 raise ValueError("保持中・実行中のトレースは削除できません")
             root = self.path(trace_id)
             for p in root.rglob("*"):
@@ -277,8 +292,7 @@ class Store:
         for m in reversed(self.list("traces")):
             if m.get("retained"):
                 continue
-            j = self.get("jobs", m["id"])
-            if j and j["state"] not in {"completed", "cancelled", "failed"}:
+            if self.trace_busy(m["id"]):
                 continue
             try:
                 root = self.path(m["id"])

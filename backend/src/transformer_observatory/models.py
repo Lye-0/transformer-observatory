@@ -110,8 +110,8 @@ def capabilities(architecture, verified=False):
         mlp=state,
         generation=state,
         quantization="非対応",
-        interventions="非対応",
-        tuned_lens="非対応",
+        interventions="対応（Prefill・境界限定）",
+        tuned_lens="学習済み重みの登録が必要",
     )
 
 

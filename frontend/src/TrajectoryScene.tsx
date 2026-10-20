@@ -19,6 +19,7 @@ type Props = {
   onSelect: (index: number, multi: boolean) => void;
   onStage?: (stage: number) => void;
   cameraBus?: React.RefObject<{ position: number[]; target: number[]; source?: string } | null>;
+  measuredLabel?: string;
 };
 
 export function tokenColor(i: number) {
@@ -48,7 +49,7 @@ export default function TrajectoryScene(props: Props) {
     host.appendChild(renderer.domElement);
     renderer.domElement.setAttribute(
       'aria-label',
-      `${props.count}本の実測トークン軌跡。選択は左のトークン一覧からも操作できます。`,
+      `${props.count}本の${props.measuredLabel || '実測トークン軌跡'}。トークン選択からも操作できます。`,
     );
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(43, 1, 0.01, 10000);
@@ -345,7 +346,8 @@ export default function TrajectoryScene(props: Props) {
         </div>
       )}
       <div className="scene-caption">
-        <span className="live-dot" /> MEASURED TRAJECTORIES <b>{props.count.toLocaleString()}</b>
+        <span className="live-dot" /> {props.measuredLabel || 'MEASURED TRAJECTORIES'}{' '}
+        <b>{props.count.toLocaleString()}</b>
         <span> / 全トークン</span>
       </div>
       <div className="scene-performance">

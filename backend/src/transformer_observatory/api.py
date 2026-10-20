@@ -18,14 +18,18 @@ from starlette.background import BackgroundTask
 from .analysis import compare
 from .folders import open_folder
 from .jobs import Jobs
+from .lenses import register_lens
 from .models import register_model
+from .research import Research, report_csv
 from .runtime import InstanceLock
 from .schema import (
     TERMINAL,
     AnalysisRequest,
     ComparisonRequest,
+    LensRegistration,
     ModelRegistration,
     SettingsUpdate,
+    StudyRequest,
     TraceMetadataUpdate,
 )
 from .storage import SCHEMA_VERSION, Store, atomic_json, default_data_root, digest
@@ -40,6 +44,7 @@ def create_app(store=None, testing=False):
     try:
         store = store or Store()
         jobs = Jobs(store)
+        research = Research(store, jobs)
     except Exception:
         if guard:
             guard.close()
@@ -64,6 +69,7 @@ def create_app(store=None, testing=False):
 
     app = FastAPI(title="Transformer Observatory", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.store, app.state.jobs = store, jobs
+    app.state.research = research
 
     @app.middleware("http")
     async def local_security(request: Request, call_next):
@@ -189,7 +195,7 @@ def create_app(store=None, testing=False):
                 error=m.get("error"),
                 description=m.get("description", ""),
                 tags=m.get("tags", []),
-                active=(store.get("jobs", m["id"]) or {}).get("state", "completed") not in TERMINAL,
+                active=store.trace_busy(m["id"]),
             )
             for m in store.list("traces")
         ]
@@ -205,7 +211,7 @@ def create_app(store=None, testing=False):
     @app.patch("/api/traces/{trace_id}")
     def update_trace(trace_id: str, body: TraceMetadataUpdate):
         with store.lock:
-            if (store.get("jobs", trace_id) or {}).get("state", "completed") not in TERMINAL:
+            if store.trace_busy(trace_id):
                 raise ValueError("実行中のトレースは編集できません")
             m = store.manifest(trace_id)
             m.update(body.model_dump())
@@ -264,7 +270,52 @@ def create_app(store=None, testing=False):
             token, step, stage = int(body["token"]), int(body["step"]), str(body["stage"])
         except (KeyError, ValueError, TypeError) as exc:
             raise ValueError("token・step・stageを指定してください") from exc
-        return jobs.executor.submit(jobs.lens, trace_id, stage, token, step).result()
+        return jobs.executor.submit(jobs.lens, trace_id, stage, token, step, body.get("lens_id")).result()
+
+    @app.get("/api/research/studies")
+    def studies():
+        return [
+            {k: v for k, v in row.items() if k not in {"report", "diagnostic"}}
+            for row in store.list("studies")
+        ]
+
+    @app.post("/api/research/studies", status_code=202)
+    def submit_study(body: StudyRequest):
+        return research.submit(body)
+
+    @app.get("/api/research/studies/{study_id}")
+    def get_study(study_id: str):
+        return research.get(study_id)
+
+    @app.post("/api/research/studies/{study_id}/cancel")
+    def cancel_study(study_id: str):
+        return research.cancel(study_id)
+
+    @app.get("/api/research/studies/{study_id}/export")
+    def export_study(study_id: str, format: str = "json"):
+        item = research.get(study_id)
+        if item["state"] != "completed":
+            raise ValueError("完了した研究レポートを選択してください")
+        headers = {"Content-Disposition": f'attachment; filename="research-{item["id"]}.{format}"'}
+        if format == "json":
+            return Response(
+                json.dumps(item["report"], ensure_ascii=False, allow_nan=False, indent=2),
+                media_type="application/json",
+                headers=headers,
+            )
+        if format == "csv":
+            return Response(
+                "\ufeff" + report_csv(item["report"]), media_type="text/csv; charset=utf-8", headers=headers
+            )
+        raise ValueError("jsonまたはcsvを選択してください")
+
+    @app.get("/api/research/lenses")
+    def lenses():
+        return store.list("lenses")
+
+    @app.post("/api/research/lenses/register")
+    def add_lens(body: LensRegistration):
+        return register_lens(store, jobs.model(body.model_id), body.path, body.name)
 
     @app.get("/api/traces/{trace_id}/tensor")
     def tensor(
