@@ -169,6 +169,10 @@ class Jobs:
                 generation_backend="full-context recompute" if registration["id"] == TINY_ID else "KV cache",
                 observation_definition="embedding + attention_residual + mlp_residual; final norm excluded",
             )
+            kv_heads = registration.get("kv_heads") or registration["heads"]
+            manifest["query_to_kv_heads"] = [
+                h // (registration["heads"] // kv_heads) for h in range(registration["heads"])
+            ]
             writer = TraceWriter(self.store, trace_id, manifest)
             self.update(trace_id, state="loading", stage=1, percent=7, detail="モデルと解析アダプターを準備")
             model = load_model(registration, pf["device"], getattr(torch, pf["dtype"]))

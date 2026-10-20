@@ -84,6 +84,15 @@ def project_trace(store, writer, cancel):
     coords, disp, metrics = transform(store, m, pca)
     for a, kind in [(coords, "coordinates"), (disp, "displacement"), (metrics, "metrics")]:
         writer.write(a, kind=kind, stage="all", positions=list(range(len(coords))))
+    validity = np.ones(metrics.shape, dtype=np.uint8)
+    previous_norms = np.concatenate((metrics[:, :1, 0], metrics[:, :-1, 0]), axis=1)
+    validity[:, :, 3] = previous_norms > 0
+    validity[:, :, 4] = (metrics[:, :, 0] > 0) & (previous_norms > 0)
+    validity[:, :, 6] = 0
+    for stage, name in enumerate(m["stages"]):
+        if name.endswith(".mlp") and stage > 0:
+            validity[:, stage, 6] = (metrics[:, stage, 2] > 0) & (metrics[:, stage - 1, 2] > 0)
+    writer.write(validity, kind="metric_validity", stage="all", positions=list(range(len(coords))))
     m["metric_names"] = [
         "norm",
         "displacement",
@@ -178,11 +187,13 @@ def compare(store, left_id, right_id):
     left_lookup = {(r["stage"], p): (r, idx) for r in records(left) for idx, p in enumerate(r["positions"])}
     right_lookup = {(r["stage"], p): (r, idx) for r in records(right) for idx, p in enumerate(r["positions"])}
     for stage in left["stages"]:
+        left_arrays = {r["file"]: store.load(left_id, r) for r in records(left) if r["stage"] == stage}
+        right_arrays = {r["file"]: store.load(right_id, r) for r in records(right) if r["stage"] == stage}
         for pair in alignment:
             lr, li = left_lookup[stage, pair["left"]]
             rr, ri = right_lookup[stage, pair["right"]]
-            x = np.asarray(store.load(left_id, lr)[li], dtype=np.float64)
-            y = np.asarray(store.load(right_id, rr)[ri], dtype=np.float64)
+            x = np.asarray(left_arrays[lr["file"]][li], dtype=np.float64)
+            y = np.asarray(right_arrays[rr["file"]][ri], dtype=np.float64)
             differences.append(
                 dict(
                     stage=stage,

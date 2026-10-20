@@ -126,3 +126,32 @@ def test_incremental_projection_is_finite_and_reproducible():
     b = fit_projection(arrays, "incremental", 64)
     np.testing.assert_allclose(a["basis"], b["basis"])
     assert np.isfinite(a["basis"]).all()
+
+
+def test_selected_head_scope_preserves_all_residual_trajectories(tmp_path):
+    request = AnalysisRequest(prompt="test", level=3, heads=[1], layers=[0], device="cpu")
+    _, writer, adapter, _ = capture_model(tmp_path, TinyModel().eval(), request)
+    assert len(writer.manifest["stages"]) == 9
+    details = [r for r in writer.manifest["tensors"] if r["kind"] == "tensor"]
+    assert all(r["layer"] == 0 for r in details)
+    for r in details:
+        if r["heads"] is not None:
+            assert r["heads"] == [1]
+    assert all(c["passed"] for c in adapter.checks)
+
+
+def test_zero_vectors_keep_validity_separate_from_numeric_storage(tmp_path):
+    request = AnalysisRequest(prompt="x")
+    store = Store(tmp_path / "data", tmp_path / "traces")
+    writer = TraceWriter(
+        store,
+        "b" * 32,
+        dict(title="zero", level=2, request=request.model_dump(), tokens=[dict(id=1, processed=True)]),
+    )
+    writer.write(np.zeros((1, 4), dtype=np.float32), kind="residual", stage="embedding", positions=[0])
+    project_trace(store, writer, threading.Event())
+    r = next(r for r in writer.manifest["tensors"] if r["kind"] == "metric_validity")
+    validity = store.load(writer.trace_id, r)
+    assert validity[0, 0, 3] == 0
+    assert validity[0, 0, 4] == 0
+    assert validity[0, 0, 6] == 0

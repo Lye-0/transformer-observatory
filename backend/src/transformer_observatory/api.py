@@ -202,7 +202,14 @@ def create_app(store=None, testing=False):
         a = store.load(trace_id, r)
         if token >= len(a):
             raise ValueError("トークン位置が範囲外です")
-        return dict(names=m["metric_names"], stages=m["stages"], values=a[token].tolist())
+        values = a[token].tolist()
+        valid_record = next((r for r in m["tensors"] if r["kind"] == "metric_validity"), None)
+        if valid_record:
+            validity = store.load(trace_id, valid_record)[token]
+            values = [
+                [v if validity[s, k] else None for k, v in enumerate(row)] for s, row in enumerate(values)
+            ]
+        return dict(names=m["metric_names"], stages=m["stages"], values=values)
 
     @app.get("/api/traces/{trace_id}/metric-values")
     def metric_values(trace_id: str):

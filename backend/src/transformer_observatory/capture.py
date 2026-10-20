@@ -175,7 +175,27 @@ class Capture:
             def hook(module, args, out=None):
                 a = cpu(args[0] if pre else out)
                 self.scratch[index][name] = a
-                self.detail(a[0, self.save_slice], name, index, space)
+                query_heads = (
+                    self.model.config.n_head if self.arch == "gpt2" else self.model.config.num_attention_heads
+                )
+                if name == "qkv_linear":
+                    for branch, value in zip(["q", "k", "v"], np.split(a, 3, axis=-1)):
+                        value = value.reshape(1, -1, query_heads, value.shape[-1] // query_heads)
+                        self.detail(
+                            value[0, self.save_slice][:, self.heads],
+                            branch + "_linear",
+                            index,
+                            branch + "_linear",
+                            self.heads,
+                        )
+                elif name in {"q_linear", "k_linear", "v_linear", "q_norm", "k_norm", "head_output"}:
+                    d_h = attn.head_dim if self.arch != "gpt2" else a.shape[-1] // query_heads
+                    value = a.reshape(1, a.shape[1], -1, d_h)[0, self.save_slice]
+                    group = query_heads // value.shape[1]
+                    selected_heads = sorted({h // group for h in self.heads})
+                    self.detail(value[:, selected_heads], name, index, space, selected_heads)
+                else:
+                    self.detail(a[0, self.save_slice], name, index, space)
 
             return hook
 
@@ -260,8 +280,17 @@ class Capture:
                 q, k = cpu(qt * cos + rotate(qt) * sin), cpu(kt * cos + rotate(kt) * sin)
             w_o = cpu(attn.o_proj.weight)
         self.detail(q[0, self.heads, self.save_slice].transpose(1, 0, 2), "q", index, "query", self.heads)
-        self.detail(k[0, :, self.save_slice].transpose(1, 0, 2), "k", index, "key", list(range(k.shape[1])))
-        self.detail(v[0, :, self.save_slice].transpose(1, 0, 2), "v", index, "value", list(range(v.shape[1])))
+        selected_kv_heads = sorted({h // (heads // k.shape[1]) for h in self.heads})
+        self.detail(
+            k[0, selected_kv_heads, self.save_slice].transpose(1, 0, 2), "k", index, "key", selected_kv_heads
+        )
+        self.detail(
+            v[0, selected_kv_heads, self.save_slice].transpose(1, 0, 2),
+            "v",
+            index,
+            "value",
+            selected_kv_heads,
+        )
         if self.step > 0 and self.arch != "observatory_tiny":
             old_k, old_v = self.history[index]
             k, v = np.concatenate((old_k, k), axis=2), np.concatenate((old_v, v), axis=2)

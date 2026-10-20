@@ -54,8 +54,8 @@ export async function coordinates(id: string, view: string) {
 
 export const bytes = (value: number) =>
   value >= 2 ** 30 ? `${(value / 2 ** 30).toFixed(2)} GiB` : `${(value / 2 ** 20).toFixed(1)} MiB`;
-export const number = (x: number | undefined) =>
-  x === undefined ? '—' : Math.abs(x) < 0.001 && x !== 0 ? x.toExponential(2) : x.toFixed(3);
+export const number = (x: number | undefined | null) =>
+  x == null ? '—' : Math.abs(x) < 0.001 && x !== 0 ? x.toExponential(2) : x.toFixed(3);
 
 export type Token = {
   position: number;
