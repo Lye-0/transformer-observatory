@@ -6,7 +6,7 @@
 |---|---|---|---|
 | 極小Transformer | 全観測点・最終Logitsを独立NumPyと照合 | Windows/WSL | 固定ランダム重み。事前学習済みLLMではない |
 | Qwen3-0.6B | Q/K Norm、RoPE、GQA、Mask、Attention集約・射影、MLP Gate/Up/SiLU/積/Down、残差加算 | Windows/WSL、BF16、全28層、生成あり、各756チェック合格 | 小さい入力で確認。任意長・別サイズまで検証済みとは扱わない |
-| GPT-2構造 | Transformersの小型ランダム構成でQKV/GELU/射影・Residualを照合 | 学習済み実重みでは未実測 | 登録可能なアダプター。正式な実モデル検証と区別する |
+| GPT-2 Small | QKV/GELU/射影・Residual、全12層・生成あり、各288チェック合格 | Windows/WSL、BF16。公開学習済みTuned LensはFP32で検証 | 小型ランダム構成に加え124M実重みを検証。短い入力での確認 |
 | 他の構造、MoE、量子化、カスタムコード | 非対応 | 非対応 | 登録時に拒否。Flash Attention内部は対象外 |
 
 ローカルsafetensorsのみを読み、`local_files_only=True`・`trust_remote_code=False`とする。
@@ -34,6 +34,6 @@ Qwen3/GPT-2のDecodeはKV Cacheを使い、新しい位置だけ保存する。�
 最終生成トークン・EOSも実際にforwardしてから軌跡を付ける。予測時点と処理時点を別々に保存する。
 Logit Lensは最終Norm/LM Headによる途中表現の読み出し。途中層が実際に出した確率や、因果的な証明として扱わない。
 
-Researchは同一fingerprintのモデルでPrefill介入を行う。Residual PatchはEmbedding・各Block出力、Head AblationはW_O入力、MLP AblationはResidualへ加算するMLP出力に対応する。Attention後のResidual Patch・生成中の介入は非対応。極小モデルと小型ランダムQwen3/GPT-2構成の数値テスト、およびQwen3-0.6B実重み検証を分けて記録する。
+Researchは同一fingerprintのモデルでPrefill介入を行う。Residual PatchはEmbedding・各Block出力、Head AblationはW_O入力、MLP AblationはResidualへ加算するMLP出力に対応する。Attention後のResidual Patch・生成中の介入は非対応。極小モデルと小型ランダムQwen3/GPT-2構成の数値テスト、およびQwen3-0.6Bの介入実重み検証を分けて記録する。
 
 追加射影はt-SNEを実装し、UMAPは提供しない。Tuned Lensは学習済みlinear_tuned_lensの登録が必要で、通常のQwenモデル重みだけでは利用できない。読込・変換の数値テストを予測品質の検証とは扱わない。詳しくは[研究機能](research.md)を参照。

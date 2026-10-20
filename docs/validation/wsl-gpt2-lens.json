@@ -1,0 +1,428 @@
+{
+  "all_passed": true,
+  "model_fingerprint": "b6b96c507cf952b6babcc390cb395ac196304499193d6740cdfcbea2c7629240",
+  "lens_fingerprint": "a5dd655138a68a5a5d2b536e61568d59d18356f8915fa78009882020020c66fe",
+  "lens_format": "AlignmentResearch linear_tuned_lens",
+  "training_info": "AlignmentResearch official public GPT-2 trained lens. Base revision e7da7f221d5bf496a48136c0cd264e630fe9fcc8; all local model/config/tokenizer files match its Git blobs or LFS SHA-256. Source space revision 1ac7285852a22309f571c2555efc37375d0c4cda.",
+  "environment": {
+    "os": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "torch": "2.14.1+cu130",
+    "device": "cuda",
+    "dtype": "float32",
+    "gpu": "NVIDIA GeForce RTX 4080 SUPER"
+  },
+  "prompts": [
+    "A scientist placed a glass of water on the table. After several minutes, she measured its temperature and wrote the result in her notebook.",
+    "The train arrived at the station before sunrise. A small group of travelers waited beside the platform with their bags and tickets.",
+    "In a quiet library, a student opened a book about astronomy. The first chapter described how stars form inside clouds of gas and dust."
+  ],
+  "evaluation": "Three short original English prompts; smoke check only, not a corpus-wide benchmark. Mean is equal-weight over prompt/stage means.",
+  "stages_per_prompt": 12,
+  "mean_logit_kl": 7.356063662303819,
+  "mean_tuned_kl": 1.3714411014484034,
+  "api_max_probability_error": 1.601874828338623e-07,
+  "api_stage": "layer.5.mlp",
+  "api_tuned_preview": {
+    "method": "Tuned Lens (trained residual affine + final norm + LM head)",
+    "lens": {
+      "index": 6,
+      "translation": "h + affine(h)",
+      "checkpoint_fingerprint": "a5dd655138a68a5a5d2b536e61568d59d18356f8915fa78009882020020c66fe"
+    },
+    "device": "cuda",
+    "dtype": "torch.float32",
+    "candidates": [
+      {
+        "id": 198,
+        "text": "\n",
+        "raw": "Ċ",
+        "probability": 0.3601609170436859
+      },
+      {
+        "id": 383,
+        "text": " The",
+        "raw": "ĠThe",
+        "probability": 0.07390546798706055
+      },
+      {
+        "id": 632,
+        "text": " It",
+        "raw": "ĠIt",
+        "probability": 0.056645940989255905
+      },
+      {
+        "id": 679,
+        "text": " He",
+        "raw": "ĠHe",
+        "probability": 0.03929959237575531
+      },
+      {
+        "id": 366,
+        "text": " \"",
+        "raw": "Ġ\"",
+        "probability": 0.030446842312812805
+      },
+      {
+        "id": 887,
+        "text": " But",
+        "raw": "ĠBut",
+        "probability": 0.02112284116446972
+      },
+      {
+        "id": 3244,
+        "text": " Then",
+        "raw": "ĠThen",
+        "probability": 0.01688958890736103
+      },
+      {
+        "id": 1375,
+        "text": " She",
+        "raw": "ĠShe",
+        "probability": 0.014990584924817085
+      },
+      {
+        "id": 554,
+        "text": " In",
+        "raw": "ĠIn",
+        "probability": 0.013674397021532059
+      },
+      {
+        "id": 1320,
+        "text": " That",
+        "raw": "ĠThat",
+        "probability": 0.013275615870952606
+      }
+    ]
+  },
+  "api_logit_preview": {
+    "method": "Logit Lens (final norm + LM head)",
+    "lens": null,
+    "device": "cuda",
+    "dtype": "torch.float32",
+    "candidates": [
+      {
+        "id": 632,
+        "text": " It",
+        "raw": "ĠIt",
+        "probability": 0.27328816056251526
+      },
+      {
+        "id": 3244,
+        "text": " Then",
+        "raw": "ĠThen",
+        "probability": 0.20901918411254883
+      },
+      {
+        "id": 198,
+        "text": "\n",
+        "raw": "Ċ",
+        "probability": 0.07089552283287048
+      },
+      {
+        "id": 887,
+        "text": " But",
+        "raw": "ĠBut",
+        "probability": 0.06633787602186203
+      },
+      {
+        "id": 383,
+        "text": " The",
+        "raw": "ĠThe",
+        "probability": 0.0369899719953537
+      },
+      {
+        "id": 1649,
+        "text": " When",
+        "raw": "ĠWhen",
+        "probability": 0.029224775731563568
+      },
+      {
+        "id": 1320,
+        "text": " That",
+        "raw": "ĠThat",
+        "probability": 0.028347894549369812
+      },
+      {
+        "id": 2102,
+        "text": " However",
+        "raw": "ĠHowever",
+        "probability": 0.027875948697328568
+      },
+      {
+        "id": 8989,
+        "text": " Unfortunately",
+        "raw": "ĠUnfortunately",
+        "probability": 0.026010414585471153
+      },
+      {
+        "id": 1318,
+        "text": " There",
+        "raw": "ĠThere",
+        "probability": 0.02279546856880188
+      }
+    ]
+  },
+  "trace_integrity": {
+    "status": "verified",
+    "checks": 24,
+    "max_abs_error": 0.0,
+    "max_scaled_error": 0.0,
+    "all_passed": true
+  },
+  "seconds": 5.1165538290006225,
+  "rows": [
+    {
+      "prompt": 0,
+      "tokens": 27,
+      "stage": "embedding",
+      "logit_kl": 42.767860412597656,
+      "tuned_kl": 4.190056800842285
+    },
+    {
+      "prompt": 0,
+      "tokens": 27,
+      "stage": "layer.0.mlp",
+      "logit_kl": 6.2031402587890625,
+      "tuned_kl": 2.098649740219116
+    },
+    {
+      "prompt": 0,
+      "tokens": 27,
+      "stage": "layer.1.mlp",
+      "logit_kl": 6.139749050140381,
+      "tuned_kl": 1.9757038354873657
+    },
+    {
+      "prompt": 0,
+      "tokens": 27,
+      "stage": "layer.2.mlp",
+      "logit_kl": 6.197295188903809,
+      "tuned_kl": 1.8298112154006958
+    },
+    {
+      "prompt": 0,
+      "tokens": 27,
+      "stage": "layer.3.mlp",
+      "logit_kl": 5.8062567710876465,
+      "tuned_kl": 1.6586625576019287
+    },
+    {
+      "prompt": 0,
+      "tokens": 27,
+      "stage": "layer.4.mlp",
+      "logit_kl": 5.24873685836792,
+      "tuned_kl": 1.4722795486450195
+    },
+    {
+      "prompt": 0,
+      "tokens": 27,
+      "stage": "layer.5.mlp",
+      "logit_kl": 4.7421393394470215,
+      "tuned_kl": 1.2417833805084229
+    },
+    {
+      "prompt": 0,
+      "tokens": 27,
+      "stage": "layer.6.mlp",
+      "logit_kl": 4.110182285308838,
+      "tuned_kl": 1.0260009765625
+    },
+    {
+      "prompt": 0,
+      "tokens": 27,
+      "stage": "layer.7.mlp",
+      "logit_kl": 3.497973918914795,
+      "tuned_kl": 0.7932125926017761
+    },
+    {
+      "prompt": 0,
+      "tokens": 27,
+      "stage": "layer.8.mlp",
+      "logit_kl": 2.6127419471740723,
+      "tuned_kl": 0.5608528256416321
+    },
+    {
+      "prompt": 0,
+      "tokens": 27,
+      "stage": "layer.9.mlp",
+      "logit_kl": 1.716905951499939,
+      "tuned_kl": 0.38104310631752014
+    },
+    {
+      "prompt": 0,
+      "tokens": 27,
+      "stage": "layer.10.mlp",
+      "logit_kl": 0.7145038843154907,
+      "tuned_kl": 0.21904292702674866
+    },
+    {
+      "prompt": 1,
+      "tokens": 24,
+      "stage": "embedding",
+      "logit_kl": 44.14863586425781,
+      "tuned_kl": 4.043532848358154
+    },
+    {
+      "prompt": 1,
+      "tokens": 24,
+      "stage": "layer.0.mlp",
+      "logit_kl": 6.633471488952637,
+      "tuned_kl": 1.808119773864746
+    },
+    {
+      "prompt": 1,
+      "tokens": 24,
+      "stage": "layer.1.mlp",
+      "logit_kl": 6.108909606933594,
+      "tuned_kl": 1.6657416820526123
+    },
+    {
+      "prompt": 1,
+      "tokens": 24,
+      "stage": "layer.2.mlp",
+      "logit_kl": 5.54603910446167,
+      "tuned_kl": 1.469671607017517
+    },
+    {
+      "prompt": 1,
+      "tokens": 24,
+      "stage": "layer.3.mlp",
+      "logit_kl": 4.870635032653809,
+      "tuned_kl": 1.2619718313217163
+    },
+    {
+      "prompt": 1,
+      "tokens": 24,
+      "stage": "layer.4.mlp",
+      "logit_kl": 4.364957332611084,
+      "tuned_kl": 1.1490119695663452
+    },
+    {
+      "prompt": 1,
+      "tokens": 24,
+      "stage": "layer.5.mlp",
+      "logit_kl": 4.087551116943359,
+      "tuned_kl": 1.0083602666854858
+    },
+    {
+      "prompt": 1,
+      "tokens": 24,
+      "stage": "layer.6.mlp",
+      "logit_kl": 3.359858989715576,
+      "tuned_kl": 0.8151302337646484
+    },
+    {
+      "prompt": 1,
+      "tokens": 24,
+      "stage": "layer.7.mlp",
+      "logit_kl": 3.1703319549560547,
+      "tuned_kl": 0.7072994709014893
+    },
+    {
+      "prompt": 1,
+      "tokens": 24,
+      "stage": "layer.8.mlp",
+      "logit_kl": 2.6261725425720215,
+      "tuned_kl": 0.5342532992362976
+    },
+    {
+      "prompt": 1,
+      "tokens": 24,
+      "stage": "layer.9.mlp",
+      "logit_kl": 2.356778621673584,
+      "tuned_kl": 0.32760486006736755
+    },
+    {
+      "prompt": 1,
+      "tokens": 24,
+      "stage": "layer.10.mlp",
+      "logit_kl": 1.0143879652023315,
+      "tuned_kl": 0.20961463451385498
+    },
+    {
+      "prompt": 2,
+      "tokens": 27,
+      "stage": "embedding",
+      "logit_kl": 45.559234619140625,
+      "tuned_kl": 4.236194133758545
+    },
+    {
+      "prompt": 2,
+      "tokens": 27,
+      "stage": "layer.0.mlp",
+      "logit_kl": 6.733899116516113,
+      "tuned_kl": 2.069812297821045
+    },
+    {
+      "prompt": 2,
+      "tokens": 27,
+      "stage": "layer.1.mlp",
+      "logit_kl": 6.014614582061768,
+      "tuned_kl": 1.936170220375061
+    },
+    {
+      "prompt": 2,
+      "tokens": 27,
+      "stage": "layer.2.mlp",
+      "logit_kl": 5.066512584686279,
+      "tuned_kl": 1.7159641981124878
+    },
+    {
+      "prompt": 2,
+      "tokens": 27,
+      "stage": "layer.3.mlp",
+      "logit_kl": 4.368079662322998,
+      "tuned_kl": 1.493438482284546
+    },
+    {
+      "prompt": 2,
+      "tokens": 27,
+      "stage": "layer.4.mlp",
+      "logit_kl": 3.838444471359253,
+      "tuned_kl": 1.3195230960845947
+    },
+    {
+      "prompt": 2,
+      "tokens": 27,
+      "stage": "layer.5.mlp",
+      "logit_kl": 3.6940300464630127,
+      "tuned_kl": 1.1779474020004272
+    },
+    {
+      "prompt": 2,
+      "tokens": 27,
+      "stage": "layer.6.mlp",
+      "logit_kl": 3.3548946380615234,
+      "tuned_kl": 0.9710844159126282
+    },
+    {
+      "prompt": 2,
+      "tokens": 27,
+      "stage": "layer.7.mlp",
+      "logit_kl": 2.9693241119384766,
+      "tuned_kl": 0.795226514339447
+    },
+    {
+      "prompt": 2,
+      "tokens": 27,
+      "stage": "layer.8.mlp",
+      "logit_kl": 2.3505094051361084,
+      "tuned_kl": 0.5996695160865784
+    },
+    {
+      "prompt": 2,
+      "tokens": 27,
+      "stage": "layer.9.mlp",
+      "logit_kl": 1.9808562994003296,
+      "tuned_kl": 0.404887318611145
+    },
+    {
+      "prompt": 2,
+      "tokens": 27,
+      "stage": "layer.10.mlp",
+      "logit_kl": 0.8426768183708191,
+      "tuned_kl": 0.20455007255077362
+    }
+  ],
+  "validation_script_commit": "8162dda"
+}

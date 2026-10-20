@@ -14,7 +14,7 @@ WindowsネイティブとWSLの独立cloneでCPU・CUDAを検証する。GitHub 
 
 ```powershell
 backend\.venv\Scripts\python.exe -m pytest backend/tests -q
-backend\.venv\Scripts\python.exe -m ruff check --config backend/pyproject.toml backend scripts/validate_model.py scripts/validate_research.py
+backend\.venv\Scripts\python.exe -m ruff check --config backend/pyproject.toml backend scripts/validate_model.py scripts/validate_research.py scripts/validate_tuned_lens.py
 mise.exe exec -- pnpm --dir frontend run build
 mise.exe exec -- pnpm --dir frontend run format:check
 ```
@@ -100,3 +100,37 @@ backend\.venv\Scripts\python.exe scripts/validate_research.py --trace-run .obser
 `--trace-run`は`validate_model.py`で確定した停止中の検証カタログに限定する。上の10条件には学習済みTuned Lensの予測品質は含めない。このPCに対象重みがなく、Lensは未学習fixtureによる数値検証までである。
 
 Windows ChromeではResearchの3介入、統計、全399点t-SNE、観測点・Token選択、条件付きJSON/CSV、研究履歴の再読込を確認した。各レポートの実行条件を表示し、編集中のフォームと区別する。390 / 768 / 1024 / 1440pxで横はみ出しを確認し、コンソール警告・エラーなし。起動時の前回トレース復元がナビゲーションを上書きする競合も修正した。
+
+## 公開GPT-2 Small・学習済みTuned Lens
+
+Qwen3-0.6B用Lensはダウンロード可能な公開重みを確認できなかったため、GPT-2 Small（124M）の公式公開Lensを使って実学習済み重みでの読出しを検証した。Lens configが指定するモデルrevisionへファイルを合わせ、6ファイルのGit blob/LFS SHA-256とモデルfingerprintを両OSで照合した。[固定URLと照合証跡](validation/gpt2-lens-provenance.json)、[調査の出典と読み出し条件](research.md)を参照。
+
+まずBF16/CUDA、Level 4、全12層、各2トークン生成で内部取得を検証した。両入力とも7位置・25観測点・288チェックに合格し、共通先頭3トークンの高次元差は0だった。
+
+| 条件 | 1入力目 | 2入力目 |
+|---|---:|---:|
+| Windows: 読込〜保存完了 | 19.529秒 | 16.239秒 |
+| WSL: 読込〜保存完了 | 9.721秒 | 7.892秒 |
+| 最大scaled error（両OS） | 0.181819 | 0.187266 |
+| CUDA割当ピーク | 約0.247 GiB | 約0.247 GiB |
+| 保存容量 | 約8.56 MiB | 約8.56 MiB |
+
+生レポート: [Windows GPT-2](validation/windows-gpt2.json)、[WSL GPT-2](validation/wsl-gpt2.json)。時間・容量はQwen3と同じくCPU参照・保存・PCAを含む。BF16許容誤差内のチェックであり、全成分の絶対誤差が小さいことを意味しない。
+
+次にFP32/CUDAで公式学習済みLensを使用し、独自英文3本・各12読み出し点・全位置を評価した。各prompt/読み出し点の平均KLを等しい重みで平均した値である。
+
+| 項目 | Windows | WSL |
+|---|---:|---:|
+| KL(最終分布 \|\| Logit Lens) | 7.356064 | 7.356064 |
+| KL(最終分布 \|\| Tuned Lens) | 1.371441 | 1.371441 |
+| APIと直接計算の候補確率の最大差 | 1.602e-7 | 1.602e-7 |
+
+Embeddingから最終Block直前までの12点を含み、最終Norm適用済みhidden_stateを二重にNormへ渡していない。APIはBlock 5出力・入力末尾で照合した。これは短い動作確認であり、汎用コーパスの品質測定ではない。
+生レポート: [Windows Lens](validation/windows-gpt2-lens.json)、[WSL Lens](validation/wsl-gpt2-lens.json)。
+
+```powershell
+backend\.venv\Scripts\python.exe scripts/validate_model.py --model .tools/models/gpt2 --output .observatory/validation/gpt2 --device cuda
+backend\.venv\Scripts\python.exe scripts/validate_tuned_lens.py --model .tools/models/gpt2 --lens .tools/lenses/gpt2 --output .observatory/validation/gpt2-lens --device cuda
+```
+
+Windows Chromeでは、保持済みGPT-2サンプルのPredictionでLogit/Tuned Lensを切り替えて計算した。異なるモデルの実験が混在するとき、Patch取得元の候補と統計の選択対象もfingerprintで制限する。

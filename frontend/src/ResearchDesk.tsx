@@ -50,10 +50,15 @@ export default function ResearchDesk({ models, onError }: Props) {
       .then(([traces, lenses, studies]) => {
         if (!active) return;
         const ready = traces.filter((t) => t.status === 'completed');
+        const compatible = ready.filter((t) => t.model_fingerprint === ready[0]?.model_fingerprint);
+        const groups = new Map<string, any[]>();
+        for (const trace of ready)
+          groups.set(trace.model_fingerprint, [...(groups.get(trace.model_fingerprint) || []), trace]);
+        const statisticsGroup = [...groups.values()].find((group) => group.length >= 2) || [];
         setTraces(ready);
         setTarget(ready[0]?.id || '');
-        setSource(ready[1]?.id || ready[0]?.id || '');
-        setStatisticsIds(ready.slice(0, 2).map((t) => t.id));
+        setSource(compatible[1]?.id || compatible[0]?.id || '');
+        setStatisticsIds(statisticsGroup.slice(0, 2).map((t) => t.id));
         setLenses(lenses);
         setHistory(studies);
         setStudyId(studies[0]?.id || '');
@@ -74,6 +79,12 @@ export default function ResearchDesk({ models, onError }: Props) {
             setLayer(0);
             setHead(0);
             setStage('embedding');
+            setSource((previous) =>
+              traces.find((t) => t.id === previous)?.model_fingerprint === m.model.fingerprint
+                ? previous
+                : traces.find((t) => t.model_fingerprint === m.model.fingerprint && t.id !== m.id)?.id ||
+                  m.id,
+            );
           }
         })
         .catch((e) => onError(String(e)));
@@ -166,13 +177,13 @@ export default function ResearchDesk({ models, onError }: Props) {
       setBusy(false);
     }
   }
-  const selector = (value: string, change: (id: string) => void, label: string) => (
+  const selector = (value: string, change: (id: string) => void, label: string, fingerprint?: string) => (
     <label className="field grow">
       {label}
       <select aria-label={label} value={value} onChange={(e) => change(e.target.value)}>
         <option value="">実験を選択</option>
         {traces.map((t) => (
-          <option key={t.id} value={t.id}>
+          <option key={t.id} value={t.id} disabled={!!fingerprint && t.model_fingerprint !== fingerprint}>
             {t.title} · Level {t.level}
           </option>
         ))}
@@ -222,7 +233,7 @@ export default function ResearchDesk({ models, onError }: Props) {
             {mode === 'residual_patch' ? (
               <>
                 <div className="field-row">
-                  {selector(source, setSource, 'Patch取得元の実験')}
+                  {selector(source, setSource, 'Patch取得元の実験', manifest?.model.fingerprint)}
                   <label className="field">
                     Patchする観測点
                     <select
@@ -362,6 +373,11 @@ export default function ResearchDesk({ models, onError }: Props) {
                   <input
                     type="checkbox"
                     checked={statisticsIds.includes(t.id)}
+                    disabled={
+                      statisticsIds.length > 0 &&
+                      t.model_fingerprint !==
+                        traces.find((item) => item.id === statisticsIds[0])?.model_fingerprint
+                    }
                     onChange={(e) =>
                       setStatisticsIds((old) =>
                         e.target.checked ? [...old, t.id] : old.filter((id) => id !== t.id),

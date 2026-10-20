@@ -1,0 +1,119 @@
+{
+  "model": "openai-community/gpt2",
+  "lens": "AlignmentResearch/tuned-lens/lens/gpt2",
+  "sources": [
+    {
+      "url": "https://huggingface.co/openai-community/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/config.json",
+      "revision": "607a30d783dfa663caf39e06633721c8d4cfcd7e",
+      "file": "config.json",
+      "sha256": "0daed7749b4f02b8f76240d5444551d7b08712dab4d0adb8239c56ba823bb7b4",
+      "size": 665,
+      "remote_lfs_sha256": null
+    },
+    {
+      "url": "https://huggingface.co/openai-community/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/tokenizer.json",
+      "revision": "607a30d783dfa663caf39e06633721c8d4cfcd7e",
+      "file": "tokenizer.json",
+      "sha256": "8414cab924d8b9b33013f0d221c5862f365ee9be39c5c2bfae8a5a9e970478a6",
+      "size": 1355256,
+      "remote_lfs_sha256": null
+    },
+    {
+      "url": "https://huggingface.co/openai-community/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/tokenizer_config.json",
+      "revision": "607a30d783dfa663caf39e06633721c8d4cfcd7e",
+      "file": "tokenizer_config.json",
+      "sha256": "5e04eb606e3a1583530a42e36c2a6b6615c86f34fe77e44d9ddeb43ff940931f",
+      "size": 26,
+      "remote_lfs_sha256": null
+    },
+    {
+      "url": "https://huggingface.co/openai-community/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/merges.txt",
+      "revision": "607a30d783dfa663caf39e06633721c8d4cfcd7e",
+      "file": "merges.txt",
+      "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5",
+      "size": 456318,
+      "remote_lfs_sha256": null
+    },
+    {
+      "url": "https://huggingface.co/openai-community/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/vocab.json",
+      "revision": "607a30d783dfa663caf39e06633721c8d4cfcd7e",
+      "file": "vocab.json",
+      "sha256": "196139668be63f3b5d6574427317ae82f612a97c5d1cdaf36ed2256dbf636783",
+      "size": 1042301,
+      "remote_lfs_sha256": null
+    },
+    {
+      "url": "https://huggingface.co/openai-community/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/generation_config.json",
+      "revision": "607a30d783dfa663caf39e06633721c8d4cfcd7e",
+      "file": "generation_config.json",
+      "sha256": "ed0b32ac72c0f5f44a719abb2d7786ea5146c871f83717b7f2018065954de02b",
+      "size": 124,
+      "remote_lfs_sha256": null
+    },
+    {
+      "url": "https://huggingface.co/openai-community/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/model.safetensors",
+      "revision": "607a30d783dfa663caf39e06633721c8d4cfcd7e",
+      "file": "model.safetensors",
+      "sha256": "248dfc3911869ec493c76e65bf2fcf7f615828b0254c12b473182f0f81d3a707",
+      "size": 548105171,
+      "remote_lfs_sha256": "248dfc3911869ec493c76e65bf2fcf7f615828b0254c12b473182f0f81d3a707"
+    },
+    {
+      "url": "https://huggingface.co/spaces/AlignmentResearch/tuned-lens/resolve/1ac7285852a22309f571c2555efc37375d0c4cda/lens/gpt2/config.json",
+      "revision": "1ac7285852a22309f571c2555efc37375d0c4cda",
+      "file": "lens/gpt2/config.json",
+      "sha256": "84764e9fb4aef06fe3007d08531ce7ea9213f8436291089f3e8fa4af36126549",
+      "size": 191,
+      "remote_lfs_sha256": null
+    },
+    {
+      "url": "https://huggingface.co/spaces/AlignmentResearch/tuned-lens/resolve/1ac7285852a22309f571c2555efc37375d0c4cda/lens/gpt2/params.pt",
+      "revision": "1ac7285852a22309f571c2555efc37375d0c4cda",
+      "file": "lens/gpt2/params.pt",
+      "sha256": "1e0494dcf4a56a77b73b421820941ea948ffae0c6a0391d88c9cb10b48bc19c8",
+      "size": 28353795,
+      "remote_lfs_sha256": "1e0494dcf4a56a77b73b421820941ea948ffae0c6a0391d88c9cb10b48bc19c8"
+    }
+  ],
+  "trained_base_revision": "e7da7f221d5bf496a48136c0cd264e630fe9fcc8",
+  "model_fingerprint": "b6b96c507cf952b6babcc390cb395ac196304499193d6740cdfcbea2c7629240",
+  "trained_revision_file_matches": [
+    {
+      "file": "config.json",
+      "sha256": "0daed7749b4f02b8f76240d5444551d7b08712dab4d0adb8239c56ba823bb7b4",
+      "trained_revision": "e7da7f221d5bf496a48136c0cd264e630fe9fcc8"
+    },
+    {
+      "file": "generation_config.json",
+      "sha256": "ed0b32ac72c0f5f44a719abb2d7786ea5146c871f83717b7f2018065954de02b",
+      "trained_revision": "e7da7f221d5bf496a48136c0cd264e630fe9fcc8"
+    },
+    {
+      "file": "merges.txt",
+      "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5",
+      "trained_revision": "e7da7f221d5bf496a48136c0cd264e630fe9fcc8"
+    },
+    {
+      "file": "model.safetensors",
+      "sha256": "248dfc3911869ec493c76e65bf2fcf7f615828b0254c12b473182f0f81d3a707",
+      "trained_revision": "e7da7f221d5bf496a48136c0cd264e630fe9fcc8"
+    },
+    {
+      "file": "tokenizer.json",
+      "sha256": "8414cab924d8b9b33013f0d221c5862f365ee9be39c5c2bfae8a5a9e970478a6",
+      "trained_revision": "e7da7f221d5bf496a48136c0cd264e630fe9fcc8"
+    },
+    {
+      "file": "vocab.json",
+      "sha256": "196139668be63f3b5d6574427317ae82f612a97c5d1cdaf36ed2256dbf636783",
+      "trained_revision": "e7da7f221d5bf496a48136c0cd264e630fe9fcc8"
+    }
+  ],
+  "archived_modern_metadata": [
+    {
+      "file": "tokenizer_config.json",
+      "sha256": "5e04eb606e3a1583530a42e36c2a6b6615c86f34fe77e44d9ddeb43ff940931f",
+      "reason": "Added after trained revision; archived to use exact original revision files"
+    }
+  ]
+}

@@ -187,6 +187,7 @@ def create_app(store=None, testing=False):
                 level=m["level"],
                 status=m["status"],
                 model=m["model"]["name"],
+                model_fingerprint=m["model"]["fingerprint"],
                 created_at=m["created_at"],
                 retained=m["retained"],
                 size_bytes=m.get("size_bytes", 0),

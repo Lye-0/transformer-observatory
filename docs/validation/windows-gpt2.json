@@ -1,0 +1,76 @@
+{
+  "results": [
+    {
+      "id": "7e8ad8721f9e450bbf90ae6700d028de",
+      "seconds": 19.529,
+      "tokens": 7,
+      "checkpoints": 25,
+      "integrity": {
+        "status": "verified",
+        "checks": 288,
+        "max_abs_error": 2.2041015625,
+        "max_scaled_error": 0.18181818181818182,
+        "all_passed": true
+      },
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "fingerprint": "b6b96c507cf952b6babcc390cb395ac196304499193d6740cdfcbea2c7629240",
+      "size_bytes": 8978889,
+      "sampled_peak_rss_bytes": 1762492416,
+      "peak_cuda_allocated_bytes": 264856576,
+      "peak_cuda_reserved_bytes": 289406976,
+      "environment": {
+        "os": "Windows-11-10.0.26300-SP0",
+        "torch": "2.14.1+cu130",
+        "transformers": "5.18.0",
+        "numpy": "2.5.4",
+        "python": "3.13.15",
+        "cuda": "13.0",
+        "gpu": "NVIDIA GeForce RTX 4080 SUPER",
+        "matmul_precision": {
+          "bf16_reduced_precision_reduction": false,
+          "fp16_reduced_precision_reduction": false,
+          "tf32": false
+        }
+      }
+    },
+    {
+      "id": "633d343ba9734cbf8091a95cb43476c6",
+      "seconds": 16.239,
+      "tokens": 7,
+      "checkpoints": 25,
+      "integrity": {
+        "status": "verified",
+        "checks": 288,
+        "max_abs_error": 2.2041015625,
+        "max_scaled_error": 0.18726591760299627,
+        "all_passed": true
+      },
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "fingerprint": "b6b96c507cf952b6babcc390cb395ac196304499193d6740cdfcbea2c7629240",
+      "size_bytes": 8978813,
+      "sampled_peak_rss_bytes": 1816215552,
+      "peak_cuda_allocated_bytes": 265511936,
+      "peak_cuda_reserved_bytes": 268435456,
+      "environment": {
+        "os": "Windows-11-10.0.26300-SP0",
+        "torch": "2.14.1+cu130",
+        "transformers": "5.18.0",
+        "numpy": "2.5.4",
+        "python": "3.13.15",
+        "cuda": "13.0",
+        "gpu": "NVIDIA GeForce RTX 4080 SUPER",
+        "matmul_precision": {
+          "bf16_reduced_precision_reduction": false,
+          "fp16_reduced_precision_reduction": false,
+          "tf32": false
+        }
+      }
+    }
+  ],
+  "elapsed": 36.775,
+  "common_prefix_tokens": 3,
+  "common_prefix_max_distance": 0.0,
+  "validation_script_commit": "8162dda"
+}

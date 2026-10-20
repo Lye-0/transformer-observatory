@@ -36,7 +36,27 @@ Level 2以上の全トークン×全観測点を3次元へ射影する。近傍�
 
 TorchのZIP形式は`weights_only=True`・CPU mmapで読み、古い非ZIP形式は拒否する。safetensorsを優先する。512MiB・設定RAM予算の上限、登録時からのチェックサム変更も検証する。登録後はExplorerのPredictionでLensを選択する。結果はLensによる補正後の読み出しであり、途中層の実出力や正しい解釈の証明とは扱わない。
 
-このPCの既存`llm-lab`では学習済みLensが見つからなかった。通常のQwen3重みは別物である。実装の読込・変換・Stage対応は明示的な未学習の数値fixtureでテストした。Qwen3の学習済みLensによる予測品質は未検証。実モデルでその検証を行うには、対象モデルに対応する学習済みLens、またはLens学習用のデータ・学習条件が必要になる。
+既存`llm-lab`では学習済みLensが見つからなかったため、公式配布のGPT-2用Lensを別途取得し、Windows/WSLで検証した。通常のQwen3モデル重みは別物である。未学習fixtureによる数値テストに加え、GPT-2用の実学習済みLensで実装を確認できる。
+
+### 公開重みの調査とGPT-2検証
+
+2026-10-20時点で、[公式Lens一覧](https://huggingface.co/spaces/AlignmentResearch/tuned-lens/tree/main/lens)とHugging Faceの公開モデル一覧から、Qwen3-0.6B用のダウンロード可能な学習済みTuned Lensは確認できなかった。公開されていないと断定するものではない。
+[Query Lens論文 Appendix C](https://arxiv.org/html/2606.07617v1#A3)にはQwen3-0.6B用Lensの学習・評価結果がある。しかし[論文の公式リポジトリ](https://github.com/HYU-NLP/query-lens)では`.gitignore`で`/tuned_lens/`をリリース対象から除外し、設定はローカルの`params.pt`を参照している。論文での使用と重みの配布を区別する。Qwen3-8B用やJacobian Lens等をQwen3-0.6B用Tuned Lensとして流用しない。
+
+代わりに、仕様対象の小型[GPT-2 124M](https://huggingface.co/openai-community/gpt2)と[公式GPT-2 Lens](https://huggingface.co/spaces/AlignmentResearch/tuned-lens/tree/1ac7285852a22309f571c2555efc37375d0c4cda/lens/gpt2)を取得した。モデルはLens configが指定する`e7da7f221d5bf496a48136c0cd264e630fe9fcc8`のファイルとGit blob/LFS SHA-256を照合した。最新モデルrevisionで追加されたTokenizerメタデータは別途保管し、実行する6ファイルは学習時revisionと一致させた。
+
+- Lens配布revision: `1ac7285852a22309f571c2555efc37375d0c4cda`。
+- `params.pt`のSHA-256: `1e0494dcf4a56a77b73b421820941ea948ffae0c6a0391d88c9cb10b48bc19c8`（約27MiB）。
+- モデルsafetensors SHA-256: `248dfc3911869ec493c76e65bf2fcf7f615828b0254c12b473182f0f81d3a707`。
+- 両OSで一致したObservatoryモデルfingerprint: `b6b96c507cf952b6babcc390cb395ac196304499193d6740cdfcbea2c7629240`。
+
+独自の短い英文3本・Embeddingと各Block出力の12読み出し点を使い、FP32/CUDAで確認した。最終出力分布に対するKLの平均はLogit Lens 7.356064、Tuned Lens 1.371441。APIと直接読出しの上位候補確率差は最大1.61e-7未満で、両OSとも合格した。短いスモークテストであり、大規模な未見コーパスでの品質保証ではない。実測値は[数値検証](numerical-validation.md)へ記録する。
+
+Windowsには`.tools/models/gpt2`と`.tools/lenses/gpt2`を用意し、Model ManagerとResearchへ登録済み。Libraryの「GPT-2 · 公開Tuned Lens検証」を開き、Predictionから選べる。追加テキストの提供やLens学習は、この実装検証には不要である。Qwen3-0.6B用Lensの予測品質は引き続き未検証であり、そのモデルで使う場合だけ適合する学習済み重み、または新規学習が必要になる。
+
+```powershell
+backend\.venv\Scripts\python.exe scripts/validate_tuned_lens.py --model .tools/models/gpt2 --lens .tools/lenses/gpt2 --output .observatory/validation/gpt2-lens --device cuda
+```
 
 ## 保存と再現
 
