@@ -18,7 +18,7 @@ jobs:
           python -m pip install torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu
           python -m pip install -e backend pytest==9.1.1 httpx==0.28.1 ruff==0.17.1
       - run: python -m pytest backend/tests -q
-      - run: python -m ruff check --config backend/pyproject.toml backend scripts/validate_model.py scripts/validate_research.py
+      - run: python -m ruff check --config backend/pyproject.toml backend scripts/validate_model.py scripts/validate_research.py scripts/validate_tuned_lens.py
   frontend:
     runs-on: ubuntu-latest
     steps:

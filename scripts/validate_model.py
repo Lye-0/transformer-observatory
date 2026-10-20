@@ -19,10 +19,11 @@ def main():
     parser.add_argument("--model", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--device", default="cuda")
+    parser.add_argument("--name", default="")
     args = parser.parse_args()
     out = Path(args.output).resolve()
     store = Store(out / "data", out / "traces")
-    registration = register_model(args.model, "Qwen3-0.6B")
+    registration = register_model(args.model, args.name or Path(args.model).name)
     store.put("models", registration["id"], registration)
     jobs = Jobs(store)
     results = []
