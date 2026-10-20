@@ -27,6 +27,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [job, setJob] = useState<Job | null>(null);
   const [traceId, setTraceId] = useState('');
+  const [draft, setDraft] = useState<Record<string, any>>();
   const reload = useCallback(async () => {
     setModels(await api<Model[]>('models'));
   }, []);
@@ -179,7 +180,7 @@ export default function App() {
           </div>
         ) : (
           <>
-            {nav === 'analysis' && (
+            <div hidden={nav !== 'analysis'}>
               <NewAnalysis
                 models={models}
                 onJob={(j) => {
@@ -187,12 +188,27 @@ export default function App() {
                   setNav('progress');
                 }}
                 onError={setError}
+                initialRequest={draft}
               />
-            )}
+            </div>
             {nav === 'models' && <ModelManager models={models} reload={reload} onError={setError} />}
             {nav === 'library' && <Library onOpen={open} onError={setError} />}
             {nav === 'settings' && <Settings onError={setError} />}
-            {nav === 'explorer' && traceId && <Explorer id={traceId} onError={setError} />}
+            {nav === 'explorer' && traceId && (
+              <Explorer
+                id={traceId}
+                onError={setError}
+                onReanalyze={(request, fingerprint) => {
+                  const model = models.find((item) => item.fingerprint === fingerprint);
+                  if (!model) {
+                    setError('同じモデルをこのOSのModel Managerに登録してから、追加解析してください');
+                    return;
+                  }
+                  setDraft({ ...request, model_id: model.id });
+                  setNav('analysis');
+                }}
+              />
+            )}
             {nav === 'progress' && job && (
               <div className="progress-page">
                 <div className="eyebrow">OBSERVING THE TRANSFORMER</div>

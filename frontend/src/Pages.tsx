@@ -22,7 +22,8 @@ export function NewAnalysis({
   models,
   onJob,
   onError,
-}: Common & { models: Model[]; onJob: (job: Job) => void }) {
+  initialRequest,
+}: Common & { models: Model[]; onJob: (job: Job) => void; initialRequest?: Record<string, any> }) {
   const [modelId, setModelId] = useState(models.find((m) => m.trained)?.id || 'tiny-transformer');
   const [prompt, setPrompt] = useState('The quiet sky is full of possibilities.');
   const [title, setTitle] = useState('');
@@ -33,6 +34,7 @@ export function NewAnalysis({
   const [dtype, setDtype] = useState('auto');
   const [layers, setLayers] = useState('');
   const [heads, setHeads] = useState('');
+  const [tensorScope, setTensorScope] = useState('');
   const [attention, setAttention] = useState(false);
   const [seed, setSeed] = useState(42);
   const [temperature, setTemperature] = useState(0);
@@ -41,6 +43,26 @@ export function NewAnalysis({
   const [pf, setPf] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const model = models.find((m) => m.id === modelId);
+  useEffect(() => {
+    if (!initialRequest) return;
+    const r = initialRequest;
+    setModelId(r.model_id);
+    setPrompt(r.prompt);
+    setTitle(r.title || '');
+    setLevel(r.level);
+    setGenerate(r.generate || false);
+    setMaxNew(r.max_new_tokens || 16);
+    setDevice(r.device || 'auto');
+    setDtype(r.dtype || 'auto');
+    setLayers((r.layers || []).join(','));
+    setHeads((r.heads || []).join(','));
+    setTensorScope((r.tensors || []).join(','));
+    setAttention(r.attention || false);
+    setSeed(r.seed ?? 42);
+    setTemperature(r.temperature ?? 0);
+    setTopP(r.top_p ?? 1);
+    setProjection(r.projection || 'auto');
+  }, [initialRequest]);
   const indices = (text: string) => (text.trim() ? text.split(',').map((x) => Number(x.trim())) : []);
   const payload = () => ({
     model_id: modelId,
@@ -53,6 +75,10 @@ export function NewAnalysis({
     dtype,
     layers: indices(layers),
     heads: indices(heads),
+    tensors: tensorScope
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean),
     attention,
     seed,
     temperature,
@@ -71,6 +97,7 @@ export function NewAnalysis({
     dtype,
     layers,
     heads,
+    tensorScope,
     attention,
     seed,
     temperature,
@@ -106,7 +133,7 @@ export function NewAnalysis({
           </div>
           <label className="field">
             モデル
-            <select value={modelId} onChange={(e) => setModelId(e.target.value)}>
+            <select aria-label="モデル" value={modelId} onChange={(e) => setModelId(e.target.value)}>
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
@@ -127,6 +154,7 @@ export function NewAnalysis({
           <label className="field prompt-field">
             プロンプト
             <textarea
+              aria-label="プロンプト"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={6}
@@ -194,7 +222,7 @@ export function NewAnalysis({
               <div className="field-row">
                 <label className="field">
                   デバイス
-                  <select value={device} onChange={(e) => setDevice(e.target.value)}>
+                  <select aria-label="デバイス" value={device} onChange={(e) => setDevice(e.target.value)}>
                     <option value="auto">自動</option>
                     <option value="cuda">CUDA</option>
                     <option value="cpu">CPU</option>
@@ -202,7 +230,7 @@ export function NewAnalysis({
                 </label>
                 <label className="field">
                   計算精度
-                  <select value={dtype} onChange={(e) => setDtype(e.target.value)}>
+                  <select aria-label="計算精度" value={dtype} onChange={(e) => setDtype(e.target.value)}>
                     {['auto', 'float32', 'float16', 'bfloat16'].map((v) => (
                       <option key={v}>{v}</option>
                     ))}
@@ -229,6 +257,14 @@ export function NewAnalysis({
                       />
                     </label>
                   </div>
+                  <label className="field">
+                    テンソル名（空欄で取得可能な全種類）
+                    <input
+                      value={tensorScope}
+                      onChange={(e) => setTensorScope(e.target.value)}
+                      placeholder="例 q,k,v,attention_weights,gate,up,product"
+                    />
+                  </label>
                   <label className="check-field">
                     <input
                       type="checkbox"
@@ -251,7 +287,11 @@ export function NewAnalysis({
                 </label>
                 <label className="field">
                   PCA
-                  <select value={projection} onChange={(e) => setProjection(e.target.value)}>
+                  <select
+                    aria-label="PCA方式"
+                    value={projection}
+                    onChange={(e) => setProjection(e.target.value)}
+                  >
                     <option value="auto">自動</option>
                     <option value="exact">Exact</option>
                     <option value="incremental">Incremental</option>
@@ -323,6 +363,28 @@ export function NewAnalysis({
                   実行環境
                 </dt>
                 <dd>{pf ? `${pf.device.toUpperCase()} · ${pf.dtype}` : '自動選択'}</dd>
+              </div>
+              <div>
+                <dt>
+                  <Cpu size={15} />
+                  RAMの目安
+                </dt>
+                <dd>
+                  {pf ? `${bytes(pf.estimated_ram_bytes)} / 空き ${bytes(pf.ram_available_bytes)}` : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  <Cpu size={15} />
+                  VRAMの目安
+                </dt>
+                <dd>
+                  {pf
+                    ? pf.device === 'cuda'
+                      ? `${bytes(pf.estimated_vram_bytes)} / 空き ${bytes(pf.gpu_free_bytes)}`
+                      : 'CPUを使用'
+                    : '—'}
+                </dd>
               </div>
               <div>
                 <dt>
@@ -483,6 +545,8 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
   const [traces, setTraces] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<any>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [partial, setPartial] = useState<any>(null);
   const refresh = () =>
     api<any[]>('traces')
       .then(setTraces)
@@ -510,6 +574,22 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
           <p className="page-intro">保存した実験は、モデルの再実行なしで閲覧できます。</p>
         </div>
         <div className="button-row">
+          {selected.length > 0 && (
+            <button
+              className="danger"
+              disabled={busy}
+              onClick={() => {
+                if (confirm(`選択した${selected.length}件の一時トレースを削除します。よろしいですか？`))
+                  action(async () => {
+                    for (const id of selected)
+                      await api(`traces/${id}`, 'DELETE', undefined, { 'X-Confirm-Trace': id });
+                    setSelected([]);
+                  });
+              }}
+            >
+              選択した{selected.length}件を削除
+            </button>
+          )}
           <label className="button secondary">
             <Upload size={16} />
             インポート
@@ -535,6 +615,49 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
           </button>
         </div>
       </div>
+      {partial && (
+        <section className="panel cleanup-preview" role="region" aria-label="部分トレースの概要">
+          <div className="panel-heading">
+            <b>{partial.title} · 部分トレース</b>
+            <button className="secondary compact" onClick={() => setPartial(null)}>
+              閉じる
+            </button>
+          </div>
+          <p className="warning">{partial.error || '取得中または未完了のデータです'}</p>
+          <p>
+            {partial.stages.length}種類の観測点 · {partial.tensors.length}
+            チャンク。未完了の3D軌跡は作成しません。
+          </p>
+          <p className="path-note">
+            {partial.storage_root} / {partial.id}
+          </p>
+          <details>
+            <summary>取得できたチャンク</summary>
+            <div className="difference-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>段階</th>
+                    <th>生成Step</th>
+                    <th>形状</th>
+                    <th>ファイル</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {partial.tensors.map((r: any) => (
+                    <tr key={r.file}>
+                      <td>{r.stage}</td>
+                      <td>{r.step}</td>
+                      <td>{r.shape.join(' × ')}</td>
+                      <td>{r.file}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </section>
+      )}
       {preview && (
         <section className="panel cleanup-preview" role="region" aria-label="削除プレビュー">
           <h3>
@@ -578,6 +701,17 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
         <div className="trace-list">
           {traces.map((t) => (
             <article className="panel trace-row" key={t.id}>
+              <input
+                type="checkbox"
+                aria-label={`削除対象に選択：${t.title}`}
+                disabled={busy || t.retained || t.active}
+                checked={selected.includes(t.id)}
+                onChange={(e) =>
+                  setSelected((items) =>
+                    e.target.checked ? [...items, t.id] : items.filter((id) => id !== t.id),
+                  )
+                }
+              />
               <button className="trace-open" disabled={t.status !== 'completed'} onClick={() => onOpen(t.id)}>
                 <span className="trace-symbol">
                   <Layers3 size={21} />
@@ -597,12 +731,20 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
                   {new Date(t.created_at * 1000).toLocaleString('ja-JP')} · {bytes(t.size_bytes)}
                 </small>
                 {t.error && <small className="warning">{t.error}</small>}
+                {t.status !== 'completed' && (
+                  <button
+                    className="text-button"
+                    onClick={() => action(async () => setPartial(await api(`traces/${t.id}`)))}
+                  >
+                    部分データを確認
+                  </button>
+                )}
               </div>
               <div className="button-row">
                 <button
                   title={t.retained ? '保持を解除' : 'この実験を保持'}
                   className={t.retained ? 'icon-button active' : 'icon-button'}
-                  disabled={busy}
+                  disabled={busy || t.active}
                   onClick={() => action(() => api(`traces/${t.id}/retain?enabled=${!t.retained}`, 'POST'))}
                 >
                   <ShieldCheck size={18} />
@@ -615,7 +757,7 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
                 <button
                   className="icon-button danger-text"
                   title="削除"
-                  disabled={busy || t.retained}
+                  disabled={busy || t.retained || t.active}
                   onClick={() => {
                     if (confirm(`「${t.title}」を削除します。よろしいですか？`))
                       action(() => api(`traces/${t.id}`, 'DELETE', undefined, { 'X-Confirm-Trace': t.id }));

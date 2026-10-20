@@ -12,14 +12,14 @@ try {
     uv sync --project backend --python 3.13.15 --locked
     if ($LASTEXITCODE -ne 0) { throw 'バックエンド依存関係の準備に失敗しました' }
     if (-not $SkipFrontend) {
-        if (-not (Get-Command mise -ErrorAction SilentlyContinue)) { throw 'miseが必要です。' }
-        mise trust
+        if (-not (Get-Command mise.exe -ErrorAction SilentlyContinue)) { throw 'miseが必要です。' }
+        mise.exe trust
         if ($LASTEXITCODE -ne 0) { throw 'mise設定の確認に失敗しました' }
-        mise install
+        mise.exe install
         if ($LASTEXITCODE -ne 0) { throw 'Node・pnpmの準備に失敗しました' }
-        mise exec -- pnpm --dir frontend install --frozen-lockfile
+        mise.exe exec -- pnpm --dir frontend install --frozen-lockfile
         if ($LASTEXITCODE -ne 0) { throw 'フロントエンド依存関係の準備に失敗しました' }
-        mise exec -- pnpm --dir frontend run build
+        mise.exe exec -- pnpm --dir frontend run build
         if ($LASTEXITCODE -ne 0) { throw 'フロントエンドのビルドに失敗しました' }
     }
     Write-Host '準備ができました。 .\scripts\start.ps1 で起動できます。'

@@ -58,7 +58,7 @@ class Capture:
         if not passed:
             raise ValueError(f"数値整合性チェックに失敗: {label} Layer {layer}, error={error:.6g}")
 
-    def write(self, a, kind, stage, layer, space="residual", heads=None):
+    def write(self, a, kind, stage, layer, space="residual", heads=None, provenance="hook"):
         self.writer.write(
             a,
             kind=kind,
@@ -68,6 +68,7 @@ class Capture:
             positions=self.positions,
             space=space,
             heads=heads,
+            provenance=provenance,
         )
 
     def add_reference(self, left, right):
@@ -78,9 +79,13 @@ class Capture:
     def residual(self, a, stage, layer):
         self.write(a[0, self.save_slice], "residual", stage, layer)
 
-    def detail(self, a, name, layer, space, heads=None):
-        if self.request.level >= 3 and layer in self.selected:
-            self.write(a, "tensor", name, layer, space, heads)
+    def detail(self, a, name, layer, space, heads=None, provenance="hook"):
+        if (
+            self.request.level >= 3
+            and layer in self.selected
+            and (not self.request.tensors or name in self.request.tensors)
+        ):
+            self.write(a, "tensor", name, layer, space, heads, provenance)
 
     def set_step(self, step, positions, recomputed=False):
         self.step, self.positions = step, list(positions)
@@ -149,6 +154,7 @@ class Capture:
         def hook(module, args, out):
             s = self.scratch[index]
             s["mlp"] = cpu(out)
+            s["mlp_input"] = cpu(args[0])
             self.detail(cpu(out)[0, self.save_slice], "mlp_update", index, "residual")
             self.detail(cpu(args[0])[0, self.save_slice], "mlp_norm", index, "residual_normalized")
 
@@ -166,9 +172,46 @@ class Capture:
                 gate, up = [torch.tensor(s[k], dtype=self.arithmetic_dtype) for k in ["gate", "up"]]
                 expected = cpu(torch.nn.functional.silu(gate) * up)
                 self.check("swiglu_product", s["product"], expected, index)
+            if "mlp_input" in s and index in self.selected and self.request.level >= 3:
+                self.validate_mlp(index, s, module.mlp)
             del self.scratch[index]
 
         return hook
+
+    def linear_reference(self, values, module, transposed=False):
+        weight = module.weight.detach().cpu()
+        if transposed:
+            weight = weight.T
+        bias = module.bias.detach().cpu() if module.bias is not None else None
+        value = torch.tensor(values, dtype=self.arithmetic_dtype)
+        return cpu(torch.nn.functional.linear(value, weight, bias))
+
+    def validate_mlp(self, index, values, mlp):
+        if self.arch == "gpt2":
+            self.check(
+                "mlp_up_projection",
+                values["up"],
+                self.linear_reference(values["mlp_input"], mlp.c_fc, True),
+                index,
+            )
+            reference = cpu(mlp.act(torch.tensor(values["up"], dtype=self.arithmetic_dtype)))
+            self.check("mlp_activation", values["activation"], reference, index)
+            self.check(
+                "mlp_down_projection",
+                values["mlp"],
+                self.linear_reference(values["activation"], mlp.c_proj, True),
+                index,
+            )
+        else:
+            for name in ["gate", "up"]:
+                reference = self.linear_reference(values["mlp_input"], getattr(mlp, name + "_proj"))
+                self.check("mlp_" + name + "_projection", values[name], reference, index)
+            self.check(
+                "mlp_down_projection",
+                values["mlp"],
+                self.linear_reference(values["product"], mlp.down_proj),
+                index,
+            )
 
     def install_details(self, index, layer, attn):
         def save(name, space, pre=False):
@@ -279,10 +322,22 @@ class Capture:
                 # A float32-only reconstruction of BF16 RoPE changes the attention scores.
                 q, k = cpu(qt * cos + rotate(qt) * sin), cpu(kt * cos + rotate(kt) * sin)
             w_o = cpu(attn.o_proj.weight)
-        self.detail(q[0, self.heads, self.save_slice].transpose(1, 0, 2), "q", index, "query", self.heads)
+        self.detail(
+            q[0, self.heads, self.save_slice].transpose(1, 0, 2),
+            "q",
+            index,
+            "query",
+            self.heads,
+            "reconstructed" if "rope" in s else "hook",
+        )
         selected_kv_heads = sorted({h // (heads // k.shape[1]) for h in self.heads})
         self.detail(
-            k[0, selected_kv_heads, self.save_slice].transpose(1, 0, 2), "k", index, "key", selected_kv_heads
+            k[0, selected_kv_heads, self.save_slice].transpose(1, 0, 2),
+            "k",
+            index,
+            "key",
+            selected_kv_heads,
+            "reconstructed" if "rope" in s else "hook",
         )
         self.detail(
             v[0, selected_kv_heads, self.save_slice].transpose(1, 0, 2),
@@ -303,6 +358,14 @@ class Capture:
         logits_t = qt @ kt.transpose(-1, -2) * scaling
         start = k.shape[2] - q.shape[2]
         mask = np.arange(k.shape[2])[None, :] > np.arange(start, start + q.shape[2])[:, None]
+        applied_mask = cpu(s["attention_mask"])[0, 0] != 0 if "attention_mask" in s else mask
+        self.detail(
+            applied_mask[self.save_slice].astype(np.uint8),
+            "attention_mask",
+            index,
+            "attention_mask",
+            provenance="backend_mask",
+        )
         if "attention_mask" in s:
             logits_t = logits_t + s["attention_mask"][..., : k.shape[2]]
         else:
@@ -318,7 +381,7 @@ class Capture:
         contribution = np.einsum(
             "thk,dhk->thd", z_heads[:, self.heads], w_o.reshape(w_o.shape[0], heads, d_h)[:, self.heads]
         )
-        self.detail(contribution, "head_contribution", index, "residual", self.heads)
+        self.detail(contribution, "head_contribution", index, "residual", self.heads, "reconstructed")
         full_contribution = np.einsum("thk,dhk->td", z_heads, w_o.reshape(w_o.shape[0], heads, d_h))
         projection = attn.c_proj if self.arch == "gpt2" else attn.o_proj
         if projection.bias is not None:

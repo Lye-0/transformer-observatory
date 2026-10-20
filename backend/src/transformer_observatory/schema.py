@@ -17,6 +17,7 @@ class AnalysisRequest(BaseModel):
     dtype: Literal["auto", "float32", "float16", "bfloat16"] = "auto"
     layers: list[int] = Field(default_factory=list, max_length=256)
     heads: list[int] = Field(default_factory=list, max_length=256)
+    tensors: list[str] = Field(default_factory=list, max_length=64)
     attention: bool = False
     max_tokens: int = Field(default=2048, ge=1, le=32768)
     projection: Literal["auto", "exact", "incremental"] = "auto"
@@ -25,6 +26,34 @@ class AnalysisRequest(BaseModel):
     def scope(self):
         if any(x < 0 for x in self.layers + self.heads):
             raise ValueError("Layer/Headは0以上で指定してください")
+        allowed = {
+            "q_linear",
+            "k_linear",
+            "v_linear",
+            "q_norm",
+            "k_norm",
+            "q_pre_rope",
+            "q",
+            "k",
+            "v",
+            "head_output",
+            "head_contribution",
+            "attention_norm",
+            "attention_update",
+            "attention_weights",
+            "attention_mask",
+            "gate",
+            "up",
+            "activation",
+            "product",
+            "mlp_norm",
+            "mlp_update",
+        }
+        if any(name not in allowed for name in self.tensors):
+            raise ValueError("未対応のテンソル名が含まれています")
+        self.layers = sorted(set(self.layers))
+        self.heads = sorted(set(self.heads))
+        self.tensors = sorted(set(self.tensors))
         return self
 
 

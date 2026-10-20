@@ -5,6 +5,8 @@ import json
 import time
 from pathlib import Path
 
+import psutil
+import torch
 from transformer_observatory.analysis import compare
 from transformer_observatory.jobs import Jobs
 from transformer_observatory.models import register_model
@@ -28,6 +30,9 @@ def main():
     try:
         for text in ["The sky is blue.", "The sky is green."]:
             t = time.monotonic()
+            if args.device == "cuda":
+                torch.cuda.reset_peak_memory_stats()
+            rss_peak = psutil.Process().memory_info().rss
             job = jobs.submit(
                 AnalysisRequest(
                     model_id=registration["id"],
@@ -41,6 +46,7 @@ def main():
                 )
             )
             while True:
+                rss_peak = max(rss_peak, psutil.Process().memory_info().rss)
                 state = store.get("jobs", job["id"])
                 if state["state"] in {"completed", "failed", "cancelled"}:
                     break
@@ -58,6 +64,13 @@ def main():
                     dtype=m["dtype"],
                     device=m["device"],
                     fingerprint=m["model"]["fingerprint"],
+                    size_bytes=m["size_bytes"],
+                    sampled_peak_rss_bytes=rss_peak,
+                    peak_cuda_allocated_bytes=torch.cuda.max_memory_allocated()
+                    if args.device == "cuda"
+                    else 0,
+                    peak_cuda_reserved_bytes=torch.cuda.max_memory_reserved() if args.device == "cuda" else 0,
+                    environment=m["environment"],
                 )
             )
         comparison = compare(store, results[0]["id"], results[1]["id"])

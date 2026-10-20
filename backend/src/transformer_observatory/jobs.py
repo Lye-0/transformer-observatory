@@ -78,7 +78,31 @@ class Jobs:
             if request.dtype != "auto"
             else ("float32" if device == "cpu" or m["id"] == TINY_ID else "bfloat16")
         )
+        # Eager attention materializes scores/probabilities; include them even without archival.
+        element_bytes = 4 if dtype == "float32" else 2
+        weight_memory = m.get("weight_bytes", 0) * (2 if dtype == "float32" else 1)
+        eager_workspace = m["heads"] * length**2 * (element_bytes * 2 + 4)
+        kv_memory = 2 * m["layers"] * length * m["hidden_size"] * element_bytes
+        activation_memory = length * m["hidden_size"] * 48 * element_bytes
+        device_estimate = weight_memory + eager_workspace + kv_memory + activation_memory + 256 * 2**20
+        host_estimate = weight_memory + (
+            eager_workspace * 2 + activation_memory * 3
+            if request.level >= 3 or device == "cpu"
+            else activation_memory
+        )
+        host_estimate += self.store.settings["ram_budget_mib"] * 2**20
+        ram_available = psutil.virtual_memory().available
+        gpu_free = torch.cuda.mem_get_info()[0] if torch.cuda.is_available() else None
+        if host_estimate > ram_available * 0.85:
+            raise ValueError("推定RAM使用量が空き容量に近すぎます。入力長・取得範囲を減らしてください")
+        if device == "cuda" and device_estimate > gpu_free * 0.9:
+            raise ValueError("推定VRAM使用量が空き容量に近すぎます。入力長を減らすかCPUを選んでください")
+        if device == "cuda" and dtype == "bfloat16" and not torch.cuda.is_bf16_supported():
+            raise ValueError("このGPUはbfloat16をサポートしていません。float32またはfloat16を選んでください")
         warnings = []
+        warnings.append(
+            "RAM・VRAMはEager AttentionとKV Cacheを含む概算で、ピーク使用量の保証ではありません。"
+        )
         if request.level >= 3:
             warnings.append("詳細容量は概算です。実行時も容量上限を監視します。")
         if request.level == 1:
@@ -96,9 +120,11 @@ class Jobs:
             dtype=dtype,
             estimated_spool_bytes=spool,
             estimated_final_bytes=(length * stages * 40 if request.level == 1 else spool),
-            ram_available_bytes=psutil.virtual_memory().available,
+            ram_available_bytes=ram_available,
+            estimated_ram_bytes=host_estimate,
+            estimated_vram_bytes=device_estimate if device == "cuda" else 0,
             disk_free_bytes=disk_free,
-            gpu_free_bytes=torch.cuda.mem_get_info()[0] if torch.cuda.is_available() else None,
+            gpu_free_bytes=gpu_free,
             weight_bytes=m.get("weight_bytes", 0),
             warnings=warnings,
         )
@@ -166,6 +192,7 @@ class Jobs:
                 ),
                 capture_dtype="float32",
                 capture_backend="pytorch-eager",
+                tensor_provenance="hook=actual module input/output; reconstructed=measured values + weights with validated adapter math; backend_mask=mask converted to boolean",
                 generation_backend="full-context recompute" if registration["id"] == TINY_ID else "KV cache",
                 observation_definition="embedding + attention_residual + mlp_residual; final norm excluded",
             )
@@ -344,16 +371,25 @@ class Jobs:
             raise ValueError("この位置のResidualは未取得です")
         model = None
         try:
-            model = load_model(m["model"], m["device"], getattr(torch, m["dtype"]))
-            tokenizer = load_tokenizer(m["model"])
+            registration = next(
+                (r for r in self.models() if r["fingerprint"] == m["model"]["fingerprint"]), None
+            )
+            if not registration:
+                raise ValueError("同じ重み・TokenizerのモデルをこのOSのModel Managerに登録してください")
+            device = "cuda" if m["device"] == "cuda" and torch.cuda.is_available() else "cpu"
+            dtype = getattr(torch, m["dtype"]) if device == "cuda" else torch.float32
+            model = load_model(registration, device, dtype)
+            tokenizer = load_tokenizer(registration)
             x = np.asarray(self.store.load(trace_id, r)[r["positions"].index(token)]).copy()
-            x = torch.tensor(x, device=m["device"], dtype=getattr(torch, m["dtype"]))
+            x = torch.tensor(x, device=device, dtype=dtype)
             norm = model.transformer.ln_f if model.config.model_type == "gpt2" else model.model.norm
             with torch.inference_mode():
                 probabilities = model.lm_head(norm(x)).float().softmax(-1)
                 values, indices = probabilities.topk(10)
             return dict(
                 method="Logit Lens (final norm + LM head)",
+                device=device,
+                dtype=str(dtype),
                 candidates=[
                     dict(
                         id=int(i),

@@ -13,6 +13,19 @@ def fit_projection(arrays, method="auto", budget_mib=512, seed=42):
         width = a.shape[-1]
     if not total_rows:
         raise ValueError("射影するResidualがありません")
+    if total_rows == 1:
+        row = next(iter(arrays()))[0]
+        return dict(
+            basis=np.zeros((3, width)).tolist(),
+            mean=row.tolist(),
+            algorithm="degenerate-single-row",
+            explained_variance_ratio=[0.0, 0.0, 0.0],
+            seed=seed,
+            sign_convention="largest absolute loading positive",
+            fit_rows=1,
+            source_space="residual",
+            centered=True,
+        )
     components = min(3, total_rows, width)
     algorithm = method
     if method == "auto":
@@ -40,7 +53,8 @@ def fit_projection(arrays, method="auto", budget_mib=512, seed=42):
             svd_solver="full" if algorithm == "exact" else "randomized",
             random_state=seed,
         )
-        estimator.fit(values)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            estimator.fit(values)
     basis = np.zeros((3, width), dtype=np.float64)
     basis[:components] = estimator.components_
     for row in basis:
@@ -178,10 +192,12 @@ def compare(store, left_id, right_id):
     a, b = [[t["id"] for t in m["tokens"] if t["processed"]] for m in (left, right)]
     alignment = []
     for tag, i, j, k, end in difflib.SequenceMatcher(a=a, b=b, autojunk=False).get_opcodes():
-        if tag == "equal" or (tag == "replace" and j - i == end - k):
-            alignment += [
-                dict(left=x, right=y, match=a[x] == b[y]) for x, y in zip(range(i, j), range(k, end))
-            ]
+        count = max(j - i, end - k)
+        for offset in range(count):
+            x, y = (i + offset if i + offset < j else None), (k + offset if k + offset < end else None)
+            alignment.append(
+                dict(left=x, right=y, match=x is not None and y is not None and a[x] == b[y], operation=tag)
+            )
     # Difference metrics are computed in the original high-dimensional residual space.
     differences = []
     left_lookup = {(r["stage"], p): (r, idx) for r in records(left) for idx, p in enumerate(r["positions"])}
@@ -190,6 +206,8 @@ def compare(store, left_id, right_id):
         left_arrays = {r["file"]: store.load(left_id, r) for r in records(left) if r["stage"] == stage}
         right_arrays = {r["file"]: store.load(right_id, r) for r in records(right) if r["stage"] == stage}
         for pair in alignment:
+            if pair["left"] is None or pair["right"] is None:
+                continue
             lr, li = left_lookup[stage, pair["left"]]
             rr, ri = right_lookup[stage, pair["right"]]
             x = np.asarray(left_arrays[lr["file"]][li], dtype=np.float64)
@@ -199,7 +217,9 @@ def compare(store, left_id, right_id):
                     stage=stage,
                     **pair,
                     distance=float(np.linalg.norm(x - y)),
-                    cosine=float(np.clip(x @ y / max(np.linalg.norm(x) * np.linalg.norm(y), 1e-30), -1, 1)),
+                    cosine=float(np.clip(x @ y / (np.linalg.norm(x) * np.linalg.norm(y)), -1, 1))
+                    if np.linalg.norm(x) * np.linalg.norm(y) > 0
+                    else None,
                 )
             )
     prefix = 0
@@ -219,6 +239,10 @@ def compare(store, left_id, right_id):
         coordinates={"left": lc.tolist(), "right": rc.tolist()},
         displacement={"left": ld.tolist(), "right": rd.tolist()},
         differences=differences,
+        settings_differ=any(
+            left.get(key) != right.get(key)
+            for key in ["device", "dtype", "capture_backend", "observation_definition"]
+        ),
         common_prefix_tokens=prefix,
         common_prefix_max_distance=prefix_error,
     )

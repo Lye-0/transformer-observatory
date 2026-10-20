@@ -316,7 +316,19 @@ class TraceWriter:
         self.limit = int(store.settings["trace_limit_gib"] * 2**30)
         self.counter = 0
 
-    def write(self, array, *, kind, stage, layer=-1, step=0, positions=None, space="residual", heads=None):
+    def write(
+        self,
+        array,
+        *,
+        kind,
+        stage,
+        layer=-1,
+        step=0,
+        positions=None,
+        space="residual",
+        heads=None,
+        provenance="derived",
+    ):
         a = np.asarray(array)
         if a.dtype.hasobject or not np.isfinite(a).all():
             raise ValueError("非有限値・objectテンソルは保存できません")
@@ -345,6 +357,7 @@ class TraceWriter:
             positions=positions,
             space=space,
             heads=heads,
+            provenance=provenance,
             shape=list(a.shape),
             dtype=str(a.dtype),
             sha256=digest(path),

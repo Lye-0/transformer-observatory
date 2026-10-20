@@ -77,6 +77,7 @@ export type Model = {
   max_tokens: number;
   trained: boolean;
   capabilities: Record<string, any>;
+  fingerprint: string;
   path?: string;
 };
 export type Manifest = {

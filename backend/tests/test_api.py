@@ -149,3 +149,36 @@ def test_logit_lens_is_explicit_readout(client):
     assert "Logit Lens" in result["method"]
     assert len(result["candidates"]) == 10
     assert 0 < sum(t["probability"] for t in result["candidates"]) <= 1
+
+
+def test_lens_uses_local_registration_after_cross_os_import(client):
+    trace_id = run_job(client, level=2)
+    store = client.app.state.store
+    m = store.manifest(trace_id)
+    m["model"]["id"] = "foreign-registration-id"
+    m["model"]["path"] = "/other-os/model"
+    store.save_manifest(m)
+    response = client.post(f"/api/traces/{trace_id}/lens", json={"stage": "embedding", "token": 0, "step": 0})
+    assert response.status_code == 200, response.text
+    assert len(response.json()["candidates"]) == 10
+
+
+def test_comparison_keeps_inserted_and_deleted_tokens(client):
+    left = run_job(client, level=2)
+    job = client.post("/api/analysis/jobs", json={"prompt": "Hello world", "device": "cpu"}).json()
+    wait_job(client, job["id"])
+    comparison = client.post("/api/traces/compare", json={"left": left, "right": job["id"]}).json()
+    assert any(pair["left"] is None for pair in comparison["alignment"])
+    assert {pair["right"] for pair in comparison["alignment"]} == set(range(12))
+    assert comparison["common_prefix_max_distance"] < 1e-5
+
+
+def test_preflight_rejects_insufficient_ram(client, monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "transformer_observatory.jobs.psutil.virtual_memory", lambda: SimpleNamespace(available=1024)
+    )
+    response = client.post("/api/analysis/preflight", json={"prompt": "test", "device": "cpu"})
+    assert response.status_code == 400
+    assert "RAM" in response.json()["detail"]

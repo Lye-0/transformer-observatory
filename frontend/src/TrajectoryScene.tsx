@@ -225,6 +225,13 @@ export default function TrajectoryScene(props: Props) {
       if (key !== signature) {
         signature = key;
         geometry.setDrawRange(0, p.growth ? p.stage * n * 2 : positions.length / 3);
+        if (overlayGeometry) {
+          const otherCount = props.overlay!.length / stages / 3;
+          overlayGeometry.setDrawRange(
+            0,
+            p.growth ? p.stage * otherCount * 2 : overlayGeometry.attributes.position.count,
+          );
+        }
         let maxUpdate = 0;
         if (p.metrics)
           for (let i = 2; i < p.metrics.length; i += 7) maxUpdate = Math.max(maxUpdate, p.metrics[i]);
@@ -259,6 +266,8 @@ export default function TrajectoryScene(props: Props) {
           if (child instanceof THREE.ArrowHelper) {
             child.line.geometry.dispose();
             child.cone.geometry.dispose();
+            (child.line.material as THREE.Material).dispose();
+            (child.cone.material as THREE.Material).dispose();
           }
         }
         if (p.arrows && p.stage > 0)
@@ -308,6 +317,13 @@ export default function TrajectoryScene(props: Props) {
       (points.material as THREE.Material).dispose();
       overlayGeometry?.dispose();
       overlayMaterial?.dispose();
+      for (const child of arrowGroup.children)
+        if (child instanceof THREE.ArrowHelper) {
+          child.line.geometry.dispose();
+          child.cone.geometry.dispose();
+          (child.line.material as THREE.Material).dispose();
+          (child.cone.material as THREE.Material).dispose();
+        }
       axes.geometry.dispose();
       (axes.material as THREE.Material).dispose();
       renderer.dispose();

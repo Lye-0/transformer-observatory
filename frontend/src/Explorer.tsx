@@ -18,7 +18,11 @@ import {
 import { api, coordinates, number, type Manifest } from './api';
 import TrajectoryScene, { tokenColor } from './TrajectoryScene';
 
-type Props = { id: string; onError: (message: string) => void };
+type Props = {
+  id: string;
+  onError: (message: string) => void;
+  onReanalyze: (request: Record<string, any>, fingerprint: string) => void;
+};
 const metricLabels = [
   'ベクトルノルム',
   '初期からの変位',
@@ -33,7 +37,7 @@ const stageLabel = (value: string) =>
     ? 'Embedding'
     : value.replace('layer.', 'Block ').replace('.attention', ' / Attention後').replace('.mlp', ' / MLP後');
 
-export default function Explorer({ id, onError }: Props) {
+export default function Explorer({ id, onError, onReanalyze }: Props) {
   const [m, setM] = useState<Manifest | null>(null);
   const [data, setData] = useState<Float32Array | null>(null);
   const [metrics, setMetrics] = useState<Float32Array | undefined>();
@@ -68,6 +72,8 @@ export default function Explorer({ id, onError }: Props) {
     setPins([]);
     setSelected([0]);
     setVerified(null);
+    setMetrics(undefined);
+    setTokenMetrics(null);
     api<Manifest>(`traces/${id}`)
       .then((result) => {
         if (active) {
@@ -284,6 +290,8 @@ export default function Explorer({ id, onError }: Props) {
                 count={comparison.right_tokens.filter((t: any) => t.processed).length}
                 tokens={comparison.right_tokens}
                 data={comparisonData.right}
+                metrics={undefined}
+                intensity={false}
                 selected={[]}
                 onSelect={() => {}}
                 cameraBus={cameraBus}
@@ -399,6 +407,14 @@ export default function Explorer({ id, onError }: Props) {
                         <span>{t.shape.join(' × ')}</span>
                       </summary>
                       <span className="space-label">{t.space}</span>
+                      <p className="subtle-note">
+                        {t.provenance === 'reconstructed'
+                          ? '取得した内部値と重みから再構成し、モデル演算との誤差を検証した値です。'
+                          : t.provenance === 'backend_mask'
+                            ? '適用Mask（1＝遮断、0＝接続可能）'
+                            : '実際のモジュール入出力から取得した値です。'}
+                        {t.heads && ` · Head ${t.heads.join(', ')}`}
+                      </p>
                       <div className="tensor-stats">
                         <span>min {number(t.min)}</span>
                         <span>max {number(t.max)}</span>
@@ -434,6 +450,23 @@ export default function Explorer({ id, onError }: Props) {
                     <DatabaseIcon />
                     <b>この値は未取得です</b>
                     <p>Level 3／4と対象Layerを選択して追加解析すると、詳細を調べられます。</p>
+                    <button
+                      className="secondary compact"
+                      onClick={() =>
+                        onReanalyze(
+                          {
+                            ...m.request,
+                            level: Math.max(3, m.level),
+                            layers: [layer],
+                            tensors: [],
+                            title: `${m.title.slice(0, 130)} · 詳細再解析`,
+                          },
+                          m.model.fingerprint,
+                        )
+                      }
+                    >
+                      このLayerを追加解析
+                    </button>
                   </div>
                 )}
               </>
@@ -603,6 +636,33 @@ export default function Explorer({ id, onError }: Props) {
                 {comparison.common_prefix_tokens} tokens · 高次元差の最大{' '}
                 {number(comparison.common_prefix_max_distance)}
               </p>
+              {comparison.settings_differ && (
+                <p className="warning">
+                  デバイス・精度・取得方式の設定に違いがあります。差分には計算条件の影響が含まれます。
+                </p>
+              )}
+              <p className="subtle-note">
+                左 {comparison.left_tokens.length} tokens ／ 右 {comparison.right_tokens.length}{' '}
+                tokens。挿入・削除は差分値を計算せず、対応表に残します。Side by
+                Sideの右側はトークン色で表示します。
+              </p>
+              <button
+                className="text-button"
+                onClick={() => {
+                  const url = URL.createObjectURL(
+                    new Blob([JSON.stringify({ schema_version: 1, ...comparison }, null, 2)], {
+                      type: 'application/json',
+                    }),
+                  );
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `comparison-${id}-${compareId}.json`;
+                  a.click();
+                  setTimeout(() => URL.revokeObjectURL(url), 1000);
+                }}
+              >
+                共通基底・対応表・差分をJSONで保存
+              </button>
               <div className="difference-table">
                 <table>
                   <thead>
@@ -615,21 +675,36 @@ export default function Explorer({ id, onError }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {comparison.differences
-                      .filter((d: any) => d.stage === substage)
-                      .map((d: any) => (
-                        <tr key={`${d.left}:${d.right}`}>
+                    {comparison.alignment.map((pair: any) => {
+                      const d = comparison.differences.find(
+                        (d: any) => d.stage === substage && d.left === pair.left && d.right === pair.right,
+                      );
+                      return (
+                        <tr key={`${pair.left}:${pair.right}`}>
                           <td>
-                            #{d.left} / {comparison.left_tokens[d.left].id}
+                            {pair.left === null
+                              ? '—'
+                              : `#${pair.left} / ${comparison.left_tokens[pair.left].id}`}
                           </td>
                           <td>
-                            #{d.right} / {comparison.right_tokens[d.right].id}
+                            {pair.right === null
+                              ? '—'
+                              : `#${pair.right} / ${comparison.right_tokens[pair.right].id}`}
                           </td>
-                          <td>{d.match ? '同一Token ID' : '置換位置'}</td>
-                          <td>{number(d.distance)}</td>
-                          <td>{number(d.cosine)}</td>
+                          <td>
+                            {pair.match
+                              ? '同一Token ID'
+                              : pair.left === null
+                                ? '挿入'
+                                : pair.right === null
+                                  ? '削除'
+                                  : '置換位置'}
+                          </td>
+                          <td>{number(d?.distance)}</td>
+                          <td>{number(d?.cosine)}</td>
                         </tr>
-                      ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -166,6 +166,7 @@ def create_app(store=None, testing=False):
                 token_count=len(m["tokens"]),
                 integrity=m.get("integrity"),
                 error=m.get("error"),
+                active=(store.get("jobs", m["id"]) or {}).get("state", "completed") not in TERMINAL,
             )
             for m in store.list("traces")
         ]
@@ -265,6 +266,7 @@ def create_app(store=None, testing=False):
                     space=r["space"],
                     shape=list(value.shape),
                     heads=r.get("heads"),
+                    provenance=r.get("provenance", "unspecified"),
                     min=float(flat.min()),
                     max=float(flat.max()),
                     mean=float(flat.mean()),
@@ -413,6 +415,8 @@ def create_app(store=None, testing=False):
                     return dict(id=trace_id)
             except zipfile.BadZipFile as exc:
                 raise ValueError("有効なZIPファイルを指定してください") from exc
+            except (KeyError, TypeError, UnicodeDecodeError) as exc:
+                raise ValueError("トレースの必須項目またはアーカイブ構造が不正です") from exc
 
     frontend = Path(__file__).resolve().parents[3] / "frontend/dist"
     if frontend.is_dir():

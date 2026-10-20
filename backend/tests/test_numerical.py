@@ -155,3 +155,18 @@ def test_zero_vectors_keep_validity_separate_from_numeric_storage(tmp_path):
     assert validity[0, 0, 3] == 0
     assert validity[0, 0, 4] == 0
     assert validity[0, 0, 6] == 0
+
+
+def test_tensor_scope_and_causal_mask_are_explicit(tmp_path):
+    request = AnalysisRequest(
+        prompt="test", level=4, layers=[0], heads=[1], tensors=["q", "attention_mask"], device="cpu"
+    )
+    store, writer, adapter, _ = capture_model(tmp_path, TinyModel().eval(), request)
+    details = [r for r in writer.manifest["tensors"] if r["kind"] == "tensor"]
+    assert {r["stage"] for r in details} == {"q", "attention_mask"}
+    mask = next(r for r in details if r["stage"] == "attention_mask")
+    np.testing.assert_array_equal(
+        store.load(writer.trace_id, mask), np.triu(np.ones((4, 4), dtype=np.uint8), 1)
+    )
+    assert len(writer.manifest["stages"]) == 9
+    assert all(c["passed"] for c in adapter.checks)
