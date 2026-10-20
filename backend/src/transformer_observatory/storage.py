@@ -64,6 +64,7 @@ class Store:
         self.trace_root = self.trace_root.resolve()
         self.lock = threading.RLock()
         self.previews = {}
+        self.roots = {}
         with self.db() as db:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS traces (id TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -124,8 +125,15 @@ class Store:
     def path(self, trace_id, require_owner=True):
         if not TRACE_ID.fullmatch(trace_id):
             raise ValueError("無効なトレースID")
-        metadata = self.get("traces", trace_id)
-        root = Path(metadata.get("storage_root", str(self.trace_root))) if metadata else self.trace_root
+        root = self.roots.get(trace_id)
+        if root is None:
+            metadata = self.get("traces", trace_id)
+            root = Path(metadata.get("storage_root", str(self.trace_root))) if metadata else self.trace_root
+            if metadata:
+                self.roots[trace_id] = root
+        for item in [root, *root.parents]:
+            if item.is_symlink() or item.is_junction():
+                raise ValueError("リンクされた保存領域")
         root = root.resolve()
         path = root / trace_id
         if path.is_symlink() or path.is_junction() or path.resolve().parent != root:
@@ -153,6 +161,7 @@ class Store:
             )
             atomic_json(path / "manifest.json", manifest)
             self.put("traces", trace_id, manifest)
+            self.roots[trace_id] = self.trace_root
             return path
 
     @staticmethod
@@ -194,6 +203,7 @@ class Store:
                 m.update(retained=True, storage_root=str(destination_root))
                 atomic_json(destination / "manifest.json", m)
                 self.put("traces", trace_id, m)
+                self.roots[trace_id] = destination_root
                 # Source ownership and path were checked before copying; source is removed only after verification.
                 shutil.rmtree(source)
             else:
@@ -256,6 +266,7 @@ class Store:
                 if p.is_symlink() or p.is_junction():
                     raise ValueError("リンクを含むトレースの削除を拒否しました")
             shutil.rmtree(root)
+            self.roots.pop(trace_id, None)
             with self.db() as db:
                 db.execute("DELETE FROM traces WHERE id=?", (trace_id,))
 

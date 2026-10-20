@@ -1,0 +1,81 @@
+{
+  "results": [
+    {
+      "id": "9c04061e6e164210aed2ec2af5131e0c",
+      "seconds": 88.487,
+      "tokens": 7,
+      "checkpoints": 57,
+      "integrity": {
+        "status": "verified",
+        "checks": 756,
+        "max_abs_error": 0.125,
+        "max_scaled_error": 0.1524390243902439,
+        "all_passed": true
+      },
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "fingerprint": "882000d1ec21706461f5f9aa0924e90be76d2f186861d01e53ccdd922514dac7",
+      "size_bytes": 40543150,
+      "sampled_peak_rss_bytes": 2417598464,
+      "peak_cuda_allocated_bytes": 1204334592,
+      "peak_cuda_reserved_bytes": 1218445312,
+      "environment": {
+        "os": "Windows-11-10.0.26300-SP0",
+        "torch": "2.14.1+cu130",
+        "transformers": "5.18.0",
+        "numpy": "2.5.4",
+        "python": "3.13.15",
+        "cuda": "13.0",
+        "gpu": "NVIDIA GeForce RTX 4080 SUPER",
+        "matmul_precision": {
+          "bf16_reduced_precision_reduction": false,
+          "fp16_reduced_precision_reduction": false,
+          "tf32": false
+        }
+      }
+    },
+    {
+      "id": "8de422c182884e71bfe3e2a69c8da562",
+      "seconds": 85.766,
+      "tokens": 7,
+      "checkpoints": 57,
+      "integrity": {
+        "status": "verified",
+        "checks": 756,
+        "max_abs_error": 0.125,
+        "max_scaled_error": 0.46182266009852213,
+        "all_passed": true
+      },
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "fingerprint": "882000d1ec21706461f5f9aa0924e90be76d2f186861d01e53ccdd922514dac7",
+      "size_bytes": 40543851,
+      "sampled_peak_rss_bytes": 3168751616,
+      "peak_cuda_allocated_bytes": 1204203520,
+      "peak_cuda_reserved_bytes": 1218445312,
+      "environment": {
+        "os": "Windows-11-10.0.26300-SP0",
+        "torch": "2.14.1+cu130",
+        "transformers": "5.18.0",
+        "numpy": "2.5.4",
+        "python": "3.13.15",
+        "cuda": "13.0",
+        "gpu": "NVIDIA GeForce RTX 4080 SUPER",
+        "matmul_precision": {
+          "bf16_reduced_precision_reduction": false,
+          "fp16_reduced_precision_reduction": false,
+          "tf32": false
+        }
+      }
+    }
+  ],
+  "elapsed": 192.708,
+  "common_prefix_tokens": 3,
+  "common_prefix_max_distance": 0.0,
+  "tested_commit": "14c227d33768b2d68bea686d18e663418c44d01c",
+  "measurement_notes": [
+    "Per-input seconds include load, offline capture, numeric checks, projection and disk flush.",
+    "RSS sampled every 0.1 seconds within this process; brief peaks may be missed.",
+    "CUDA peaks are PyTorch allocated/reserved bytes, excluding unrelated programs and driver overhead."
+  ]
+}

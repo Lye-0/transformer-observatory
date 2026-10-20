@@ -16,15 +16,34 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
 from .analysis import compare
+from .folders import open_folder
 from .jobs import Jobs
 from .models import register_model
-from .schema import TERMINAL, AnalysisRequest, ComparisonRequest, ModelRegistration, SettingsUpdate
-from .storage import SCHEMA_VERSION, Store, atomic_json, digest
+from .runtime import InstanceLock
+from .schema import (
+    TERMINAL,
+    AnalysisRequest,
+    ComparisonRequest,
+    ModelRegistration,
+    SettingsUpdate,
+    TraceMetadataUpdate,
+)
+from .storage import SCHEMA_VERSION, Store, atomic_json, default_data_root, digest
+from .trace_validation import validate_finite, validate_manifest
 
 
 def create_app(store=None, testing=False):
-    store = store or Store()
-    jobs = Jobs(store)
+    directory = (
+        store.data_root if store else Path(os.environ.get("OBSERVATORY_DATA_DIR") or default_data_root())
+    )
+    guard = None if testing else InstanceLock(directory)
+    try:
+        store = store or Store()
+        jobs = Jobs(store)
+    except Exception:
+        if guard:
+            guard.close()
+        raise
     session = secrets.token_urlsafe(32)
 
     @asynccontextmanager
@@ -40,6 +59,8 @@ def create_app(store=None, testing=False):
         finally:
             task.cancel()
             jobs.close()
+            if guard:
+                guard.close()
 
     app = FastAPI(title="Transformer Observatory", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.store, app.state.jobs = store, jobs
@@ -166,6 +187,8 @@ def create_app(store=None, testing=False):
                 token_count=len(m["tokens"]),
                 integrity=m.get("integrity"),
                 error=m.get("error"),
+                description=m.get("description", ""),
+                tags=m.get("tags", []),
                 active=(store.get("jobs", m["id"]) or {}).get("state", "completed") not in TERMINAL,
             )
             for m in store.list("traces")
@@ -178,6 +201,22 @@ def create_app(store=None, testing=False):
     @app.get("/api/traces/{trace_id}")
     def trace(trace_id: str):
         return store.manifest(trace_id)
+
+    @app.patch("/api/traces/{trace_id}")
+    def update_trace(trace_id: str, body: TraceMetadataUpdate):
+        with store.lock:
+            if (store.get("jobs", trace_id) or {}).get("state", "completed") not in TERMINAL:
+                raise ValueError("実行中のトレースは編集できません")
+            m = store.manifest(trace_id)
+            m.update(body.model_dump())
+            store.save_manifest(m)
+        return dict(saved=True)
+
+    @app.post("/api/storage/open")
+    def open_storage(body: dict):
+        path = store.path(str(body["trace_id"])) if body.get("trace_id") else store.trace_root
+        open_folder(path)
+        return dict(path=str(path))
 
     def find_record(trace_id, kind):
         m = store.manifest(trace_id)
@@ -379,6 +418,7 @@ def create_app(store=None, testing=False):
                         key in m for key in ["id", "stages", "tensors", "tokens", "model", "level", "title"]
                     ):
                         raise ValueError("必須のmanifest項目がありません")
+                    validate_manifest(m)
                     source_id, trace_id = m["id"], uuid.uuid4().hex
                     allowed = {"manifest.json", "integrity.json"} | {r["file"] for r in m["tensors"]}
                     for i in entries:
@@ -404,7 +444,7 @@ def create_app(store=None, testing=False):
                                 __import__("shutil").copyfileobj(src, dst, 1024 * 1024)
                             if digest(p) != r["sha256"]:
                                 raise ValueError("インポートのハッシュが一致しません")
-                            store.load(trace_id, r)
+                            validate_finite(store.load(trace_id, r))
                         m.update(status="completed", retained=False)
                         store.save_manifest(m)
                         atomic_json(root / "integrity.json", m.get("integrity", {}))
@@ -415,7 +455,7 @@ def create_app(store=None, testing=False):
                     return dict(id=trace_id)
             except zipfile.BadZipFile as exc:
                 raise ValueError("有効なZIPファイルを指定してください") from exc
-            except (KeyError, TypeError, UnicodeDecodeError) as exc:
+            except (KeyError, IndexError, TypeError, UnicodeDecodeError) as exc:
                 raise ValueError("トレースの必須項目またはアーカイブ構造が不正です") from exc
 
     frontend = Path(__file__).resolve().parents[3] / "frontend/dist"

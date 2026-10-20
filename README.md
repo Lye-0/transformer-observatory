@@ -34,6 +34,10 @@ Ctrl+Cでバックエンドを終了します。ブラウザを閉じてもバ�
 5. Trace Libraryから保持・削除・エクスポート・インポートできます。
 6. 同一モデルのLevel 2以上の実験は、両者から計算した共通PCAで比較できます。
 
+このPCではWindows側の `.tools/models/Qwen3-0.6B` を準備済みです。
+Model Managerの「検出済みQwen3-0.6Bを選択」から登録できます。
+新しい実験はLevel 2が既定。特定Blockを調べるときはLevel 3/4と対象Layer・Head・テンソル名を指定します。
+
 極小Transformerは固定ランダム重みの実計算モデルです。事前学習済みLLMではありません。
 内部値が未取得の場合は未取得と表示します。投影された距離やAttention係数を因果的重要性として扱いません。
 
@@ -44,6 +48,9 @@ Windowsの既定一時トレースは `%TEMP%/TransformerObservatory/traces/`。
 LinuxはXDGのdata/cacheディレクトリを使用します。
 `OBSERVATORY_DATA_DIR` と `OBSERVATORY_TRACE_DIR` で起動時に変更できます。
 保存先はバックエンドOS上の絶対パスです。
+保持した実験はカタログ配下の `retained/traces` へコピー・照合後に移します。
+設定画面では新しいトレースの保存先を変更できます。実験名・説明・タグはLibraryから編集できます。
+同じデータフォルダーを使うバックエンドの二重起動は拒否します。
 
 トレースはversion付きmanifest・所有マーカー・NPYチャンク・SHA-256で保存します。
 NumPyのpickle読込は使いません。不要な一時データはLibraryのプレビューを確認して削除します。
@@ -53,7 +60,7 @@ Level 1でも射影確定までは生Residualの一時容量が必要です。
 
 ```powershell
 backend\.venv\Scripts\python.exe -m pytest backend/tests -q
-mise exec -- pnpm --dir frontend run build
+mise.exe exec -- pnpm --dir frontend run build
 ```
 
 ```bash
@@ -66,6 +73,12 @@ mise exec -- pnpm --dir frontend run build
 - [総合仕様書](docs/Transformer_Observatory_Development_Specification.md)
 - [数値検証](docs/numerical-validation.md)
 - [モデル対応](docs/model-support.md)
+- [トレース形式](docs/trace-format.md)
+- [実装範囲と拡張機能](docs/implementation-status.md)
+
+Qwen3-0.6Bは両OSのCUDAで、全28層・2トークン生成・Deep Traceを検証済みです。
+各入力756項目の数値チェックを通過しています。実測時間・メモリ・再現手順は数値検証文書に記載しています。
+GPT-2は小型ランダム構成のアダプター検証まで。量子化、Tuned Lens、介入実験は初期リリースの対象外です。
 
 localhost APIはHost・Originを検証し、セッションと操作トークンを要求します。
 インターネット向けサーバーとして公開しないでください。

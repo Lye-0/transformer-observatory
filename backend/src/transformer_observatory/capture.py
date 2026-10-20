@@ -20,7 +20,7 @@ class Capture:
         self.cancellation, self.progress = cancellation, progress
         self.handles, self.scratch, self.history = [], {}, {}
         self.step, self.positions, self.save_slice = 0, [], slice(None)
-        self.checks = []
+        self.checks = writer.manifest.setdefault("checks", [])
         self.arch = model.config.model_type
         self.layers = model.transformer.h if self.arch == "gpt2" else model.model.layers
         self.selected = set(request.layers or range(len(self.layers)))

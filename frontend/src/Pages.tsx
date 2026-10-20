@@ -547,9 +547,15 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
   const [preview, setPreview] = useState<any>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [partial, setPartial] = useState<any>(null);
+  const [editing, setEditing] = useState<any>(null);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('date');
   const refresh = () =>
     api<any[]>('traces')
-      .then(setTraces)
+      .then((items) => {
+        setTraces(items);
+        setSelected((old) => old.filter((id) => items.some((t) => t.id === id && !t.retained && !t.active)));
+      })
       .catch((e) => onError(String(e)));
   useEffect(() => {
     refresh();
@@ -558,10 +564,10 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
     setBusy(true);
     try {
       await task();
-      await refresh();
     } catch (e) {
       onError(String(e));
     } finally {
+      await refresh();
       setBusy(false);
     }
   }
@@ -615,6 +621,74 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
           </button>
         </div>
       </div>
+      <div className="field-row">
+        <label className="field grow">
+          実験を検索
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="名前・モデル・説明・タグ"
+          />
+        </label>
+        <label className="field">
+          並び順
+          <select aria-label="実験の並び順" value={sort} onChange={(e) => setSort(e.target.value)}>
+            <option value="date">新しい順</option>
+            <option value="size">容量が大きい順</option>
+          </select>
+        </label>
+      </div>
+      {editing && (
+        <section className="panel cleanup-preview" role="region" aria-label="実験の情報を編集">
+          <label className="field">
+            実験名
+            <input
+              value={editing.title}
+              maxLength={160}
+              onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            説明
+            <textarea
+              value={editing.description || ''}
+              maxLength={4000}
+              onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            タグ（カンマ区切り）
+            <input
+              value={editing.tagsText}
+              onChange={(e) => setEditing({ ...editing, tagsText: e.target.value })}
+            />
+          </label>
+          <div className="button-row">
+            <button className="secondary" onClick={() => setEditing(null)}>
+              閉じる
+            </button>
+            <button
+              className="primary"
+              disabled={busy || !editing.title.trim()}
+              onClick={() =>
+                action(async () => {
+                  await api(`traces/${editing.id}`, 'PATCH', {
+                    title: editing.title,
+                    description: editing.description || '',
+                    tags: editing.tagsText
+                      .split(',')
+                      .map((t: string) => t.trim())
+                      .filter(Boolean),
+                  });
+                  setEditing(null);
+                })
+              }
+            >
+              情報を保存
+            </button>
+          </div>
+        </section>
+      )}
       {partial && (
         <section className="panel cleanup-preview" role="region" aria-label="部分トレースの概要">
           <div className="panel-heading">
@@ -699,75 +773,102 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
         </div>
       ) : (
         <div className="trace-list">
-          {traces.map((t) => (
-            <article className="panel trace-row" key={t.id}>
-              <input
-                type="checkbox"
-                aria-label={`削除対象に選択：${t.title}`}
-                disabled={busy || t.retained || t.active}
-                checked={selected.includes(t.id)}
-                onChange={(e) =>
-                  setSelected((items) =>
-                    e.target.checked ? [...items, t.id] : items.filter((id) => id !== t.id),
-                  )
-                }
-              />
-              <button className="trace-open" disabled={t.status !== 'completed'} onClick={() => onOpen(t.id)}>
-                <span className="trace-symbol">
-                  <Layers3 size={21} />
-                </span>
-                <span>
-                  <b>{t.title}</b>
+          {traces
+            .filter((t) =>
+              `${t.title} ${t.model} ${t.description} ${(t.tags || []).join(' ')}`
+                .toLowerCase()
+                .includes(query.toLowerCase()),
+            )
+            .sort((a, b) => (sort === 'size' ? b.size_bytes - a.size_bytes : b.created_at - a.created_at))
+            .map((t) => (
+              <article className="panel trace-row" key={t.id}>
+                <input
+                  type="checkbox"
+                  aria-label={`削除対象に選択：${t.title}`}
+                  disabled={busy || t.retained || t.active}
+                  checked={selected.includes(t.id)}
+                  onChange={(e) =>
+                    setSelected((items) =>
+                      e.target.checked ? [...items, t.id] : items.filter((id) => id !== t.id),
+                    )
+                  }
+                />
+                <button
+                  className="trace-open"
+                  disabled={t.status !== 'completed'}
+                  onClick={() => onOpen(t.id)}
+                >
+                  <span className="trace-symbol">
+                    <Layers3 size={21} />
+                  </span>
+                  <span>
+                    <b>{t.title}</b>
+                    <small>
+                      {t.model} · {t.token_count} tokens · Level {t.level}
+                    </small>
+                  </span>
+                </button>
+                <div className="trace-state">
+                  <span className={t.status === 'completed' ? 'tag good' : 'tag warning'}>
+                    {t.status === 'completed' ? '完了' : '不完全'}
+                  </span>
                   <small>
-                    {t.model} · {t.token_count} tokens · Level {t.level}
+                    {new Date(t.created_at * 1000).toLocaleString('ja-JP')} · {bytes(t.size_bytes)}
                   </small>
-                </span>
-              </button>
-              <div className="trace-state">
-                <span className={t.status === 'completed' ? 'tag good' : 'tag warning'}>
-                  {t.status === 'completed' ? '完了' : '不完全'}
-                </span>
-                <small>
-                  {new Date(t.created_at * 1000).toLocaleString('ja-JP')} · {bytes(t.size_bytes)}
-                </small>
-                {t.error && <small className="warning">{t.error}</small>}
-                {t.status !== 'completed' && (
+                  {t.error && <small className="warning">{t.error}</small>}
+                  {t.tags?.length > 0 && <small>{t.tags.join(' · ')}</small>}
+                  {t.status !== 'completed' && (
+                    <button
+                      className="text-button"
+                      onClick={() => action(async () => setPartial(await api(`traces/${t.id}`)))}
+                    >
+                      部分データを確認
+                    </button>
+                  )}
+                </div>
+                <div className="button-row">
                   <button
                     className="text-button"
-                    onClick={() => action(async () => setPartial(await api(`traces/${t.id}`)))}
+                    disabled={busy || t.active}
+                    onClick={() => setEditing({ ...t, tagsText: (t.tags || []).join(', ') })}
                   >
-                    部分データを確認
+                    編集
                   </button>
-                )}
-              </div>
-              <div className="button-row">
-                <button
-                  title={t.retained ? '保持を解除' : 'この実験を保持'}
-                  className={t.retained ? 'icon-button active' : 'icon-button'}
-                  disabled={busy || t.active}
-                  onClick={() => action(() => api(`traces/${t.id}/retain?enabled=${!t.retained}`, 'POST'))}
-                >
-                  <ShieldCheck size={18} />
-                </button>
-                {t.status === 'completed' && (
-                  <a className="icon-button" title="エクスポート" href={`/api/traces/${t.id}/export`}>
-                    <Download size={18} />
-                  </a>
-                )}
-                <button
-                  className="icon-button danger-text"
-                  title="削除"
-                  disabled={busy || t.retained || t.active}
-                  onClick={() => {
-                    if (confirm(`「${t.title}」を削除します。よろしいですか？`))
-                      action(() => api(`traces/${t.id}`, 'DELETE', undefined, { 'X-Confirm-Trace': t.id }));
-                  }}
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
-            </article>
-          ))}
+                  <button
+                    className="icon-button"
+                    title="保存先を開く"
+                    disabled={busy}
+                    onClick={() => action(() => api('storage/open', 'POST', { trace_id: t.id }))}
+                  >
+                    <FolderOpen size={18} />
+                  </button>
+                  <button
+                    title={t.retained ? '保持を解除' : 'この実験を保持'}
+                    className={t.retained ? 'icon-button active' : 'icon-button'}
+                    disabled={busy || t.active}
+                    onClick={() => action(() => api(`traces/${t.id}/retain?enabled=${!t.retained}`, 'POST'))}
+                  >
+                    <ShieldCheck size={18} />
+                  </button>
+                  {t.status === 'completed' && (
+                    <a className="icon-button" title="エクスポート" href={`/api/traces/${t.id}/export`}>
+                      <Download size={18} />
+                    </a>
+                  )}
+                  <button
+                    className="icon-button danger-text"
+                    title="削除"
+                    disabled={busy || t.retained || t.active}
+                    onClick={() => {
+                      if (confirm(`「${t.title}」を削除します。よろしいですか？`))
+                        action(() => api(`traces/${t.id}`, 'DELETE', undefined, { 'X-Confirm-Trace': t.id }));
+                    }}
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              </article>
+            ))}
         </div>
       )}
     </div>
@@ -887,6 +988,19 @@ export function Settings({ onError }: Common) {
           保存すると新しい解析から適用されます。既存トレースは元の場所から閲覧できます。保持した実験は、整合性確認後に永続領域へ移します。起動時の環境変数を指定した場合は、その保存先が優先されます。
         </p>
         <div className="form-actions">
+          <button
+            className="secondary"
+            onClick={async () => {
+              try {
+                await api('storage/open', 'POST', {});
+              } catch (e) {
+                onError(String(e));
+              }
+            }}
+          >
+            <FolderOpen size={16} />
+            現在の保存先を開く
+          </button>
           {saved && (
             <span className="good">
               <Check size={15} /> 保存しました

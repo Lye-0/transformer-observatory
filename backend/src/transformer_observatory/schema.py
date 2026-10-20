@@ -62,6 +62,19 @@ class ModelRegistration(BaseModel):
     name: str = Field(default="", max_length=160)
 
 
+class TraceMetadataUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    description: str = Field(default="", max_length=4000)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def tag_lengths(self):
+        self.tags = sorted(set(t.strip() for t in self.tags if t.strip()))
+        if any(len(t) > 40 for t in self.tags):
+            raise ValueError("タグは40文字以内で指定してください")
+        return self
+
+
 class ComparisonRequest(BaseModel):
     left: str
     right: str

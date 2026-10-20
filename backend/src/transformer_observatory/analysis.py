@@ -102,6 +102,7 @@ def project_trace(store, writer, cancel):
     previous_norms = np.concatenate((metrics[:, :1, 0], metrics[:, :-1, 0]), axis=1)
     validity[:, :, 3] = previous_norms > 0
     validity[:, :, 4] = (metrics[:, :, 0] > 0) & (previous_norms > 0)
+    validity[:, 0, 3:5] = 0  # Embedding has no preceding observation.
     validity[:, :, 6] = 0
     for stage, name in enumerate(m["stages"]):
         if name.endswith(".mlp") and stage > 0:

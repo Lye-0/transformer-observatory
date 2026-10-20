@@ -82,3 +82,16 @@ def test_switching_default_root_preserves_previous_trace(tmp_path):
     store.trace_root = store.validate_root(str(tmp_path / "new-root"))
     assert store.path(writer.trace_id) == old
     assert store.load(writer.trace_id, writer.manifest["tensors"][0]).shape == (2, 2)
+
+
+def test_backend_catalog_lock_rejects_second_instance_and_releases(tmp_path):
+    from transformer_observatory.runtime import InstanceLock
+
+    first = InstanceLock(tmp_path)
+    try:
+        with pytest.raises(RuntimeError, match="起動済み"):
+            InstanceLock(tmp_path)
+    finally:
+        first.close()
+    reopened = InstanceLock(tmp_path)
+    reopened.close()

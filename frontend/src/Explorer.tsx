@@ -59,6 +59,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
   const [traces, setTraces] = useState<any[]>([]);
   const [compareId, setCompareId] = useState('');
   const [comparison, setComparison] = useState<any>(null);
+  const [rightMetrics, setRightMetrics] = useState<Float32Array>();
   const [compareMode, setCompareMode] = useState('overlay');
   const [comparing, setComparing] = useState(false);
   const [verified, setVerified] = useState<boolean | null>(null);
@@ -152,6 +153,15 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
       right: new Float32Array(comparison[key].right.flat(2)),
     };
   }, [comparison, view]);
+  const stageDifferences = useMemo(
+    () =>
+      new Map<string, any>(
+        comparison?.differences
+          .filter((d: any) => d.stage === substage)
+          .map((d: any) => [`${d.left}:${d.right}`, d]) || [],
+      ),
+    [comparison, substage],
+  );
   const currentMetrics = tokenMetrics?.values[stage];
   function select(index: number, multi = false) {
     setSelected((old) =>
@@ -162,6 +172,8 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
     setComparing(true);
     try {
       setComparison(await api('traces/compare', 'POST', { left: id, right: compareId }));
+      const response = await fetch(`/api/traces/${compareId}/metric-values`);
+      setRightMetrics(response.ok ? new Float32Array(await response.arrayBuffer()) : undefined);
     } catch (e) {
       onError(String(e));
     } finally {
@@ -290,8 +302,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                 count={comparison.right_tokens.filter((t: any) => t.processed).length}
                 tokens={comparison.right_tokens}
                 data={comparisonData.right}
-                metrics={undefined}
-                intensity={false}
+                metrics={rightMetrics}
                 selected={[]}
                 onSelect={() => {}}
                 cameraBus={cameraBus}
@@ -350,7 +361,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                 <div className="metric-cards">
                   {metricLabels.map((label, i) => (
                     <div key={label}>
-                      <span>{label}</span>
+                      <span>{comparison && i === 5 ? '元実験3Dでの更新距離' : label}</span>
                       <b>{number(currentMetrics?.[i])}</b>
                     </div>
                   ))}
@@ -412,15 +423,20 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                           ? '取得した内部値と重みから再構成し、モデル演算との誤差を検証した値です。'
                           : t.provenance === 'backend_mask'
                             ? '適用Mask（1＝遮断、0＝接続可能）'
-                            : '実際のモジュール入出力から取得した値です。'}
+                            : t.provenance === 'hook'
+                              ? '実際のモジュール入出力から取得した値です。'
+                              : 'この保存形式には取得経路の区別がありません。'}
                         {t.heads && ` · Head ${t.heads.join(', ')}`}
                       </p>
                       <div className="tensor-stats">
                         <span>min {number(t.min)}</span>
                         <span>max {number(t.max)}</span>
                         <span>norm {number(t.norm)}</span>
+                        <span>mean {number(t.mean)}</span>
+                        <span>std {number(t.std)}</span>
                       </div>
                       <Heatmap values={t.values} />
+                      {t.name === 'attention_weights' && <HeadConnections tensor={t} tokens={m.tokens} />}
                       <p className="subtle-note">
                         {t.dimensions} 成分
                         {t.truncated && ' · ヒートマップは先頭16,384成分。軌跡は省略していません。'}
@@ -676,9 +692,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                   </thead>
                   <tbody>
                     {comparison.alignment.map((pair: any) => {
-                      const d = comparison.differences.find(
-                        (d: any) => d.stage === substage && d.left === pair.left && d.right === pair.right,
-                      );
+                      const d = stageDifferences.get(`${pair.left}:${pair.right}`);
                       return (
                         <tr key={`${pair.left}:${pair.right}`}>
                           <td>
@@ -712,6 +726,50 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
           )}
         </div>
       </details>
+    </div>
+  );
+}
+
+function HeadConnections({ tensor, tokens }: { tensor: any; tokens: Manifest['tokens'] }) {
+  const [head, setHead] = useState(0);
+  const width = tensor.shape[1];
+  const safeHead = Math.min(head, tensor.shape[0] - 1);
+  const values: { position: number; value: number }[] = tensor.values
+    .slice(safeHead * width, (safeHead + 1) * width)
+    .map((value: number, position: number) => ({ position, value }));
+  const sorted = values.sort((a, b) => b.value - a.value).slice(0, 16);
+  return (
+    <div className="attention-connections">
+      <label className="field">
+        接続を調べるQuery Head
+        <select
+          aria-label="接続を調べるQuery Head"
+          value={safeHead}
+          onChange={(e) => setHead(Number(e.target.value))}
+        >
+          {Array.from({ length: tensor.shape[0] }, (_, i) => (
+            <option key={i} value={i}>
+              Head {tensor.heads?.[i] ?? i}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="subtle-note">
+        選択Query位置から各Key位置への係数。上位16接続を表に表示します。行列の全値は成分表示で確認できます。
+      </p>
+      {sorted.map(({ position, value }) => (
+        <div className="prediction-row" key={position}>
+          <span>
+            #{position} {tokens[position]?.raw}
+          </span>
+          <b>{number(value)}</b>
+        </div>
+      ))}
+      {values.length < width && (
+        <p className="warning">
+          このHeadの全成分は表示上限を超えています。完全な値はエクスポートで確認してください。
+        </p>
+      )}
     </div>
   );
 }

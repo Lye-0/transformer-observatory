@@ -216,12 +216,17 @@ export default function TrajectoryScene(props: Props) {
       lastFps = performance.now(),
       lastRender = 0,
       signature = '';
+    let lastMetrics: Float32Array | undefined;
     const render = (now: number) => {
       animation = requestAnimationFrame(render);
       if (live.current.lowPower && now - lastRender < 32) return;
       lastRender = now;
       const p = live.current,
         key = `${p.stage}:${p.selected.join(',')}:${p.growth}:${p.intensity}:${p.arrows}:${hovered}`;
+      if (lastMetrics !== p.metrics) {
+        signature = '';
+        lastMetrics = p.metrics;
+      }
       if (key !== signature) {
         signature = key;
         geometry.setDrawRange(0, p.growth ? p.stage * n * 2 : positions.length / 3);

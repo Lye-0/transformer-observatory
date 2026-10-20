@@ -1,89 +1,58 @@
-# 開発環境と着手前の決定
+# 開発環境と合意事項
 
-更新日: 2026-10-20
+更新: 2026-10-20。提供仕様書の原文は `Transformer_Observatory_Development_Specification.md` に保存し、後続のユーザー指示をこの文書へ記録する。
 
-## 文書の位置付け
+## 配置
 
-`Transformer_Observatory_Development_Specification.md` は、提供された仕様書 v1.0 の原文コピー。
-この文書は、その後のユーザーとの確認で決まった環境条件を記録する。
-Python版については原文の3.12系という提案に代わり、以下の3.13.15を採用する。
+- Windows作業clone: `C:\Users\kawau\dev\LLM\transformer-observatory`
+- WSL作業clone（ユーザー承認済み）: `/home/lye/dev/llm/transformer-observatory`
+- WSL既存参考環境: `/home/lye/dev/llm/llm-lab`。本プロジェクトの依存環境として再利用せず、変更しない。
+- リモート: `https://github.com/Lye-0/transformer-observatory.git`
 
-ユーザーの実装開始指示（2026-10-20）に基づき実装・依存関係の準備・両OS検証を進める。フェーズの区切りでは停止しない。
+Windowsで変更・テスト・コミットしてGitHubへpushし、WSLの独立cloneで `git pull --ff-only` して検証する。
+仮想環境・node_modulesはOSごとに作る。Windowsの `.venv` をWSLから実行しない。共有するのはソース・ロックファイル・ポータブルなトレース。
 
-## 配置と管理
+## バージョン
 
-- Windows作業リポジトリ: `C:\Users\kawau\dev\LLM\transformer-observatory`
-- Windowsのプロジェクト専用仮想環境: `backend/.venv`
-- WSLの既存参考環境: `/home/lye/dev/llm/llm-lab/.venv`
-- WSL用の本プロジェクトのクローンは、Linux側ファイルシステムに別途作成する。配置候補: `/home/lye/dev/llm/transformer-observatory`
-- Python環境はuv、Node.jsとpnpmはmiseで管理する。仮想環境とnode_modulesはOSごとに作成する。
-- 依存ライブラリとWindows側のモデル準備は実装着手時に行う。
-- 仮想環境、モデル重み、生成トレース、キャッシュはGit管理対象にしない。着手時に.gitignoreへ反映する。
-- 当面の検証対象は数値照合用の極小TransformerとQwen3-0.6B。
-
-## 採用するツールの版
-
-| ツール | 版 | 管理方法・理由 |
+| 対象 | 版 | 管理 |
 |---|---|---|
-| Python | 3.13.15 | uv。既存WSL環境とそろえる。Windows側は今後セットアップして検証する。 |
-| Node.js | 24.21.0 | mise.toml。Windowsに導入済みのLTS版で、実体の起動を確認済み。 |
-| pnpm | 11.24.0 | mise.toml。Windowsに導入済みで、実体の起動を確認済み。 |
+| Python | 3.13.15 | uv、`.python-version`、`backend/.venv` |
+| Node.js | 24.21.0 | ルートのmise.toml |
+| pnpm | 11.24.0 | mise.tomlとpackageManager |
+| PyTorch | 2.14.1+cu130 | backend/uv.lock、公式cu130 index |
+| Transformers | 5.18.0 | backend/uv.lock |
 
-Node.jsとpnpmはルートのmise.tomlを両OSで共有する。Pythonはmise側へ重複登録しない。
-実装着手時にPython版を.python-version等へ反映し、依存ライブラリの版・ロックファイルを確定する。
+Pythonは仕様書の3.12提案に代わり、ユーザーの希望でWSL既存環境と同じ3.13.15を採用した。グローバルPython 3.11を置き換えない。
+プロジェクト用Python本体・uvキャッシュは `.tools/`、Windows仮想環境は合意済みの `backend/.venv` に作成済み。
+WSLのmise本体はユーザーが導入済み。Node・pnpm・Python・依存関係を専用cloneへ導入し、両OSのビルド・CPU/CUDA検証を実施した。
 
-## 確認済みの実行環境
+## モデル
 
-- Windows 11 Home、Core i7-13700K、RAM約96GB、RTX 4080 SUPER 16GB。
-- NVIDIAドライバー616.56。CドライブはNTFS、調査時の空き約173GiB。
-- WSL Ubuntu 26.04 LTS。既存llm-labはPython 3.13.15、torch 2.14.1（CUDA 13.0）、transformers 5.18.0、accelerate 1.15.0。
-- 既存のQwen3-0.6Bをローカルファイルのみでロードし、4トークンのGPU forwardと内部状態取得に成功。出力値の有限性を確認。
-- 上記は環境の動作確認であり、仕様が要求する各Block内部観測点の数値検証を済ませたことは意味しない。
+当面は極小TransformerとQwen3-0.6Bのみを実機検証対象とし、大規模モデル実験を行わない。
+Windows用Qwen3-0.6Bは `.tools/models/Qwen3-0.6B` に配置済み。WSLは既存のHugging Faceローカルキャッシュを参照する。モデル重みはGitへ追加しない。
+登録パスはOSごとに異なるが、fingerprintは一致する。
 
-## セットアップ時の注意
+## このPCで確認した点
 
-- 通常のWindows Pythonは3.11.2。グローバルPythonを置き換えず、uvで本プロジェクト用3.13.15を用意する。
-- 調査時はpnpmの通常呼び出しとmise配下の実体で版が異なった。プロジェクト内ではmise.tomlを適用して実行する。
-- 自動実行ではPowerShellプロファイルのmise連携がPSConsoleReadLineエラーを起こすことがある。非対話コマンドではプロファイルを読み込まない実行方法を使う。
-- uvの既定キャッシュでは権限エラーが出た。調査用の書き込み可能なキャッシュ先を明示すると解消した。セットアップ時にも保存先を確認する。
-- Ubuntu仮想ディスクの実体はCドライブ上にある。容量管理はホスト側の空きも参照する。
-- WindowsのGitはcore.autocrlf=true。着手時に.gitattributesでシェルスクリプトなどのLFを明示する。
+Windows 11 Home / i7-13700K / RAM約96GB / RTX 4080 SUPER 16GB、NVIDIAドライバー616.56。WSL Ubuntu 26.04 LTS。
+Windows CPUのスレッド数とCUDA積和精度の調整理由は [数値検証](numerical-validation.md) を参照。
+uvの既定保存先で失敗したため、起動・セットアップスクリプトはプロジェクト内のPython/キャッシュ先を明示する。
+PowerShellのmise関数による引数解釈の影響を避け、Windowsスクリプトでは `mise.exe` を呼ぶ。
+Windows/WSLの仮想ディスクは同じ物理SSDを使うため、空き容量はそれぞれのバックエンドで確認する。
 
-## ユーザーが行うWSLのmise導入
+## セットアップと更新
 
-UbuntuのBashで次を実行する。mise本体の導入作業はユーザーが担当する。
-
-```bash
-curl -fsSL https://mise.run | sh
-~/.local/bin/mise --version
+```powershell
+.\scripts\setup.ps1
+.\scripts\start.ps1
 ```
 
-Bashで有効にするため、次の行を `~/.bashrc` の末尾に1回だけ追加する。
-
 ```bash
-eval "$(~/.local/bin/mise activate bash)"
+cd /home/lye/dev/llm/transformer-observatory
+git pull --ff-only
+bash scripts/setup.sh
+bash scripts/start.sh
 ```
 
-新しいUbuntuターミナルを開き、確認する。
-
-```bash
-mise --version
-```
-
-mise本体を導入しただけでは、Node.js・pnpmはまだ導入されない。
-本プロジェクトをWSLへcloneした後、そのルートで以下を実行すれば共有設定の版を導入・確認できる。
-この操作は後の環境準備時に行う。
-
-```bash
-mise trust
-mise install
-mise exec -- node --version
-mise exec -- pnpm --version
-```
-
-期待値はそれぞれ `v24.21.0` と `11.24.0`。
-
-公式資料:
-- https://mise.jdx.dev/installing-mise.html
-- https://mise.jdx.dev/getting-started.html
-- https://mise.jdx.dev/lang/node.html
+ロックファイルの内容からセットアップする。依存変更がなければ、ソース更新後にフロントエンドをビルドしバックエンドを再起動すればよい。
+フェーズ完了は作業の停止条件にしない。追加ユーザー操作が必要な場合のみ相談する。

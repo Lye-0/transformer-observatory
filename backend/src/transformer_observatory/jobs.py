@@ -332,9 +332,11 @@ class Jobs:
                 self.store.put("models", r["id"], r)
             self.update(trace_id, state="completed", stage=5, percent=100, detail="解析完了")
         except Cancelled:
+            self.persist_checks(writer, capture)
             self.store.mark_incomplete(trace_id, "ユーザーによる中止")
             self.update(trace_id, state="cancelled", detail="中止 · 部分データを保持")
         except Exception as exc:
+            self.persist_checks(writer, capture)
             reason = str(exc) or type(exc).__name__
             self.store.mark_incomplete(trace_id, reason)
             self.update(
@@ -352,6 +354,14 @@ class Jobs:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             self.cancellations.pop(trace_id, None)
+
+    def persist_checks(self, writer, capture):
+        if writer and capture:
+            writer.manifest["checks"] = capture.checks
+            try:
+                self.store.save_manifest(writer.manifest)
+            except (OSError, ValueError):
+                pass  # Keep the last atomically committed journal if the disk itself failed.
 
     def close(self):
         self.closed = True

@@ -1,6 +1,10 @@
 param([switch]$SkipFrontend)
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$previousUvEnvironment = @{}
+foreach ($variableName in @('UV_PYTHON_INSTALL_DIR', 'UV_PYTHON_BIN_DIR', 'UV_CACHE_DIR')) {
+    $previousUvEnvironment[$variableName] = [Environment]::GetEnvironmentVariable($variableName, 'Process')
+}
 Push-Location $repoRoot
 try {
     if (-not (Get-Command uv -ErrorAction SilentlyContinue)) { throw 'uvが必要です。https://docs.astral.sh/uv/getting-started/installation/ を参照してください。' }
@@ -23,4 +27,9 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'フロントエンドのビルドに失敗しました' }
     }
     Write-Host '準備ができました。 .\scripts\start.ps1 で起動できます。'
-} finally { Pop-Location }
+} finally {
+    foreach ($variableName in $previousUvEnvironment.Keys) {
+        [Environment]::SetEnvironmentVariable($variableName, $previousUvEnvironment[$variableName], 'Process')
+    }
+    Pop-Location
+}

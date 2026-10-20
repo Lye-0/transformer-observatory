@@ -53,6 +53,8 @@ def test_full_job_reconnect_export_import_and_comparison(client):
     m = client.get(f"/api/traces/{trace_id}").json()
     assert m["status"] == "completed"
     assert m["integrity"]["all_passed"]
+    initial_metrics = client.get(f"/api/traces/{trace_id}/metrics?token=0").json()["values"][0]
+    assert initial_metrics[3] is None and initial_metrics[4] is None
     response = client.get(f"/api/traces/{trace_id}/coordinates?view=displacement")
     coords = np.frombuffer(response.content, "<f4").reshape(6, 9, 3)
     assert np.all(coords[:, 0] == 0)
@@ -182,3 +184,36 @@ def test_preflight_rejects_insufficient_ram(client, monkeypatch):
     response = client.post("/api/analysis/preflight", json={"prompt": "test", "device": "cpu"})
     assert response.status_code == 400
     assert "RAM" in response.json()["detail"]
+
+
+def test_trace_metadata_and_managed_folder_open(client, monkeypatch):
+    trace_id = run_job(client, level=1)
+    response = client.patch(
+        f"/api/traces/{trace_id}",
+        json={"title": "再現実験", "description": "条件のメモ", "tags": ["test", "test"]},
+    )
+    assert response.status_code == 200
+    item = client.get(f"/api/traces/{trace_id}").json()
+    assert item["title"] == "再現実験" and item["tags"] == ["test"]
+    opened = []
+    monkeypatch.setattr("transformer_observatory.api.open_folder", opened.append)
+    assert (
+        client.post("/api/storage/open", json={"trace_id": trace_id, "path": "/arbitrary"}).status_code == 200
+    )
+    assert opened == [client.app.state.store.path(trace_id)]
+
+
+def test_import_rejects_inconsistent_token_positions_even_with_valid_tensor_hashes(client):
+    trace_id = run_job(client, level=2)
+    exported = client.get(f"/api/traces/{trace_id}/export").content
+    changed = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(exported)) as source, zipfile.ZipFile(changed, "w") as target:
+        for name in source.namelist():
+            data = source.read(name)
+            if name == "manifest.json":
+                m = json.loads(data)
+                m["tokens"][0]["position"] = 999
+                data = json.dumps(m).encode()
+            target.writestr(name, data)
+    response = client.post("/api/storage/import", content=changed.getvalue())
+    assert response.status_code == 400
