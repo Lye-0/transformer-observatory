@@ -47,3 +47,8 @@ PCAはRAM予算に応じてRandomized / Incrementalを選び、Exact指定が予
 Windows/WSL間ではZIPを移動する。元OSの絶対パスを表示に使っても、保存先として採用しない。
 座標閲覧にモデルは不要。Logit Lensなど再実行を伴う処理では、このOSに登録済みの同一fingerprintモデルを探す。
 未知のschema_versionは推測して読まず拒否する。将来の移行処理は別バージョンとして追加する。
+
+## 研究レポート
+
+Researchの確定レポートはSQLiteの`studies`へJSONとして保存する。schema_version=1、要求条件、参照実験、モデルfingerprint、manifestハッシュ、環境と結果を含む。中断した研究ジョブは再起動時に失敗へ移し、確定レポートは維持する。
+参照中のトレースは削除・保持先への移動・自動整理から保護する。完了後も再解析したい元データは明示的に「保持」を設定する。研究JSON/CSVはトレースZIPと別にエクスポートする。詳細は[研究機能](research.md)を参照。

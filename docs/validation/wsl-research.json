@@ -1,0 +1,369 @@
+{
+  "commit": "b4660bde64eae028bc40fd8f8152017a02570053",
+  "environment": {
+    "os": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "torch": "2.14.1+cu130",
+    "numpy": "2.5.4"
+  },
+  "gpu": "NVIDIA GeForce RTX 4080 SUPER",
+  "all_passed": true,
+  "original_traces_unchanged": true,
+  "deterministic_tsne": true,
+  "tuned_lens": {
+    "status": "not_run",
+    "reason": "A model-matched trained checkpoint must be supplied separately"
+  },
+  "model_fingerprint": "882000d1ec21706461f5f9aa0924e90be76d2f186861d01e53ccdd922514dac7",
+  "sources": [
+    {
+      "id": "924e0e8888ae4db08cb07adb6928f6a8",
+      "title": "The sky is blue.",
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "created_at": 1792496054.1476772,
+      "integrity": {
+        "status": "verified",
+        "checks": 756,
+        "max_abs_error": 0.125,
+        "max_scaled_error": 0.1524390243902439,
+        "all_passed": true
+      },
+      "manifest_sha256": "3286e9299780ad2d77ac635eecae622bca4aadbfa453ed94bc5c5100a7620240"
+    },
+    {
+      "id": "924e0e8888ae4db08cb07adb6928f6a8",
+      "title": "The sky is blue.",
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "created_at": 1792496054.1476772,
+      "integrity": {
+        "status": "verified",
+        "checks": 756,
+        "max_abs_error": 0.125,
+        "max_scaled_error": 0.1524390243902439,
+        "all_passed": true
+      },
+      "manifest_sha256": "3286e9299780ad2d77ac635eecae622bca4aadbfa453ed94bc5c5100a7620240"
+    }
+  ],
+  "checks": 10,
+  "results": [
+    {
+      "name": "self_patch",
+      "seconds": 4.009854816998995,
+      "request": {
+        "kind": "intervention",
+        "trace_ids": [
+          "924e0e8888ae4db08cb07adb6928f6a8",
+          "924e0e8888ae4db08cb07adb6928f6a8"
+        ],
+        "mode": "residual_patch",
+        "layer": 0,
+        "head": 0,
+        "stage": "layer.0.mlp",
+        "positions": [],
+        "source_positions": [],
+        "readout_position": null,
+        "token_id": null,
+        "strength": 1,
+        "perplexity": 20,
+        "seed": 42
+      },
+      "mode": "residual_patch",
+      "positions": [
+        4
+      ],
+      "readout_position": 4,
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "strength": 1,
+      "restoration_max_logit_error": 0.0,
+      "kl_baseline_to_intervened": 0.0,
+      "total_variation": 0.0,
+      "logit_l2": 0.0
+    },
+    {
+      "name": "cross_patch",
+      "seconds": 1.6741708369991102,
+      "request": {
+        "kind": "intervention",
+        "trace_ids": [
+          "924e0e8888ae4db08cb07adb6928f6a8",
+          "2c9edf3aaa194f2eb8e39806560008b9"
+        ],
+        "mode": "residual_patch",
+        "layer": 0,
+        "head": 0,
+        "stage": "layer.0.mlp",
+        "positions": [],
+        "source_positions": [],
+        "readout_position": null,
+        "token_id": null,
+        "strength": 1,
+        "perplexity": 20,
+        "seed": 42
+      },
+      "mode": "residual_patch",
+      "positions": [
+        4
+      ],
+      "readout_position": 4,
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "strength": 1,
+      "restoration_max_logit_error": 0.0,
+      "kl_baseline_to_intervened": 0.0010563392260321857,
+      "total_variation": 0.0188495310962157,
+      "logit_l2": 25.5922445274598
+    },
+    {
+      "name": "final_block_patch",
+      "seconds": 1.6619126120003784,
+      "request": {
+        "kind": "intervention",
+        "trace_ids": [
+          "924e0e8888ae4db08cb07adb6928f6a8",
+          "2c9edf3aaa194f2eb8e39806560008b9"
+        ],
+        "mode": "residual_patch",
+        "layer": 0,
+        "head": 0,
+        "stage": "layer.27.mlp",
+        "positions": [],
+        "source_positions": [],
+        "readout_position": null,
+        "token_id": null,
+        "strength": 1,
+        "perplexity": 20,
+        "seed": 42
+      },
+      "mode": "residual_patch",
+      "positions": [
+        4
+      ],
+      "readout_position": 4,
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "strength": 1,
+      "restoration_max_logit_error": 0.0,
+      "kl_baseline_to_intervened": 0.12154080072979127,
+      "total_variation": 0.19026407019281522,
+      "logit_l2": 238.96045560950256
+    },
+    {
+      "name": "head_ablation",
+      "seconds": 1.6800734260013996,
+      "request": {
+        "kind": "intervention",
+        "trace_ids": [
+          "924e0e8888ae4db08cb07adb6928f6a8"
+        ],
+        "mode": "head_ablation",
+        "layer": 0,
+        "head": 0,
+        "stage": "embedding",
+        "positions": [],
+        "source_positions": [],
+        "readout_position": null,
+        "token_id": null,
+        "strength": 1,
+        "perplexity": 20,
+        "seed": 42
+      },
+      "mode": "head_ablation",
+      "positions": [
+        4
+      ],
+      "readout_position": 4,
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "strength": 1,
+      "restoration_max_logit_error": 0.0,
+      "kl_baseline_to_intervened": 0.0009738080385117805,
+      "total_variation": 0.017298416255776827,
+      "logit_l2": 33.18082301964065
+    },
+    {
+      "name": "mlp_ablation",
+      "seconds": 1.658957809999265,
+      "request": {
+        "kind": "intervention",
+        "trace_ids": [
+          "924e0e8888ae4db08cb07adb6928f6a8"
+        ],
+        "mode": "mlp_ablation",
+        "layer": 0,
+        "head": 0,
+        "stage": "embedding",
+        "positions": [],
+        "source_positions": [],
+        "readout_position": null,
+        "token_id": null,
+        "strength": 1,
+        "perplexity": 20,
+        "seed": 42
+      },
+      "mode": "mlp_ablation",
+      "positions": [
+        4
+      ],
+      "readout_position": 4,
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "strength": 1,
+      "restoration_max_logit_error": 0.0,
+      "kl_baseline_to_intervened": 0.042779975815089986,
+      "total_variation": 0.11174597433749013,
+      "logit_l2": 113.24923153482898
+    },
+    {
+      "name": "zero_strength",
+      "seconds": 1.6571028149992344,
+      "request": {
+        "kind": "intervention",
+        "trace_ids": [
+          "924e0e8888ae4db08cb07adb6928f6a8"
+        ],
+        "mode": "head_ablation",
+        "layer": 0,
+        "head": 0,
+        "stage": "embedding",
+        "positions": [],
+        "source_positions": [],
+        "readout_position": null,
+        "token_id": null,
+        "strength": 0.0,
+        "perplexity": 20,
+        "seed": 42
+      },
+      "mode": "head_ablation",
+      "positions": [
+        4
+      ],
+      "readout_position": 4,
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "strength": 0.0,
+      "restoration_max_logit_error": 0.0,
+      "kl_baseline_to_intervened": 0.0,
+      "total_variation": 0.0,
+      "logit_l2": 0.0
+    },
+    {
+      "name": "causal_prefix",
+      "seconds": 1.805247213000257,
+      "request": {
+        "kind": "intervention",
+        "trace_ids": [
+          "924e0e8888ae4db08cb07adb6928f6a8"
+        ],
+        "mode": "head_ablation",
+        "layer": 0,
+        "head": 0,
+        "stage": "embedding",
+        "positions": [],
+        "source_positions": [],
+        "readout_position": 0,
+        "token_id": null,
+        "strength": 1,
+        "perplexity": 20,
+        "seed": 42
+      },
+      "mode": "head_ablation",
+      "positions": [
+        4
+      ],
+      "readout_position": 0,
+      "dtype": "bfloat16",
+      "device": "cuda",
+      "strength": 1,
+      "restoration_max_logit_error": 0.0,
+      "kl_baseline_to_intervened": 0.0,
+      "total_variation": 0.0,
+      "logit_l2": 0.0
+    },
+    {
+      "name": "statistics",
+      "seconds": 0.1535346690016013,
+      "request": {
+        "kind": "statistics",
+        "trace_ids": [
+          "924e0e8888ae4db08cb07adb6928f6a8",
+          "2c9edf3aaa194f2eb8e39806560008b9"
+        ],
+        "mode": "residual_patch",
+        "layer": 0,
+        "head": 0,
+        "stage": "embedding",
+        "positions": [],
+        "source_positions": [],
+        "readout_position": null,
+        "token_id": null,
+        "strength": 1,
+        "perplexity": 20,
+        "seed": 42
+      },
+      "rows": 313,
+      "source_experiments": 2,
+      "independent_numpy_reference_passed": true
+    },
+    {
+      "name": "tsne",
+      "seconds": 0.8362655170003563,
+      "request": {
+        "kind": "tsne",
+        "trace_ids": [
+          "924e0e8888ae4db08cb07adb6928f6a8"
+        ],
+        "mode": "residual_patch",
+        "layer": 0,
+        "head": 0,
+        "stage": "embedding",
+        "positions": [],
+        "source_positions": [],
+        "readout_position": null,
+        "token_id": null,
+        "strength": 1,
+        "perplexity": 20.0,
+        "seed": 42
+      },
+      "point_count": 399,
+      "shape": [
+        7,
+        57,
+        3
+      ],
+      "kl_divergence": 0.10823337733745575,
+      "coordinate_sha256": "c87b965fdbe613aa4408e260799f33d93ecb47d622d59652137b84f076e6c2e1"
+    },
+    {
+      "name": "tsne_repeat",
+      "seconds": 0.7253184040000633,
+      "request": {
+        "kind": "tsne",
+        "trace_ids": [
+          "924e0e8888ae4db08cb07adb6928f6a8"
+        ],
+        "mode": "residual_patch",
+        "layer": 0,
+        "head": 0,
+        "stage": "embedding",
+        "positions": [],
+        "source_positions": [],
+        "readout_position": null,
+        "token_id": null,
+        "strength": 1,
+        "perplexity": 20.0,
+        "seed": 42
+      },
+      "point_count": 399,
+      "shape": [
+        7,
+        57,
+        3
+      ],
+      "kl_divergence": 0.10823337733745575,
+      "coordinate_sha256": "c87b965fdbe613aa4408e260799f33d93ecb47d622d59652137b84f076e6c2e1"
+    }
+  ]
+}

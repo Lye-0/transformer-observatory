@@ -8,12 +8,13 @@ WindowsネイティブとWSLの独立cloneでCPU・CUDAを検証する。GitHub 
 独立NumPy参照はLayerNorm、Q/K/V、因果Mask、Softmax、Head集約、出力射影、SwiGLU、全Residual、最終Logitsを計算する。
 小型ランダム構成のQwen3/GPT-2でモデル別アダプターも照合する。
 生成位置、固定PCA、厳密なDisplacement原点、ゼロベクトルの未定義指標、挿入・削除の対応表、共通接頭辞、取得範囲、容量中断、保持・削除、ZIP往復、OS間モデル再対応、二重起動防止を検証する。
+研究機能の自動テストでは、介入の独立参照・自己Patch・強度0・先頭因果性・解除後復元、実験単位の集計、全点t-SNE、処理中の元データ保護、研究ジョブの中止・復旧、入力ハッシュ不一致の拒否、Lensの形式・変換・不一致拒否を検証する。
 
 実行コマンド:
 
 ```powershell
 backend\.venv\Scripts\python.exe -m pytest backend/tests -q
-backend\.venv\Scripts\python.exe -m ruff check --config backend/pyproject.toml backend scripts/validate_model.py
+backend\.venv\Scripts\python.exe -m ruff check --config backend/pyproject.toml backend scripts/validate_model.py scripts/validate_research.py
 mise.exe exec -- pnpm --dir frontend run build
 mise.exe exec -- pnpm --dir frontend run format:check
 ```
@@ -74,3 +75,28 @@ Windows Chromeで実操作した項目:
 - 画面幅390 / 768 / 1024 / 1440pxでページと主要操作の横はみ出しなし。コンソール警告・エラーなし。
 
 FPSはこのPC・当該データでの観測で、Qwenの長文や任意トレースの保証ではない。軽量表示は装飾と描画頻度を変え、軌跡を削減しない。
+
+## 研究機能の実モデル検証
+
+コミット`b4660bd`、Qwen3-0.6B、同一の2入力・保存済みトレースを使い、Windows/WSLのそれぞれで10条件を検証した。BF16/CUDA、元入力の末尾位置4で読み出す。Patchの向きはblueを介入先、greenを取得元とする。
+
+| 条件 | Logits差のL2（両OS） | 解除後の最大誤差 |
+|---|---:|---:|
+| 自己Patch（Block 0後） | 0 | 0 |
+| 別入力のPatch（Block 0後） | 25.59224 | 0 |
+| 別入力のPatch（最終Block後） | 238.96046 | 0 |
+| Layer 0 / Head 0無効化 | 33.18082 | 0 |
+| Layer 0 / MLP無効化 | 113.24923 | 0 |
+| Head介入の強さ0 | 0 | 0 |
+| 末尾のHead無効化、読出位置0 | 0 | 0 |
+
+さらに2実験の集計を独立NumPyと照合した。全399点のt-SNEを同一Seedで2回計算し、各OS内で全座標が完全一致した。元manifestのハッシュは全処理の前後で変化しなかった。OS間の射影座標一致を契約にはしない。
+要約: [Windows](validation/windows-research.json)、[WSL](validation/wsl-research.json)。
+
+```powershell
+backend\.venv\Scripts\python.exe scripts/validate_research.py --trace-run .observatory/validation/local --output .observatory/validation/research.json
+```
+
+`--trace-run`は`validate_model.py`で確定した停止中の検証カタログに限定する。上の10条件には学習済みTuned Lensの予測品質は含めない。このPCに対象重みがなく、Lensは未学習fixtureによる数値検証までである。
+
+Windows ChromeではResearchの3介入、統計、全399点t-SNE、観測点・Token選択、条件付きJSON/CSV、研究履歴の再読込を確認した。各レポートの実行条件を表示し、編集中のフォームと区別する。390 / 768 / 1024 / 1440pxで横はみ出しを確認し、コンソール警告・エラーなし。起動時の前回トレース復元がナビゲーションを上書きする競合も修正した。

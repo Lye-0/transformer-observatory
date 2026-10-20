@@ -34,4 +34,6 @@ Qwen3/GPT-2のDecodeはKV Cacheを使い、新しい位置だけ保存する。�
 最終生成トークン・EOSも実際にforwardしてから軌跡を付ける。予測時点と処理時点を別々に保存する。
 Logit Lensは最終Norm/LM Headによる途中表現の読み出し。途中層が実際に出した確率や、因果的な証明として扱わない。
 
-仕様の拡張機能であるTuned Lens、Activation Patching、Ablation、UMAP/t-SNEは今回の初期リリースには含めない。学習済みLensや介入結果を偽装しない。
+Researchは同一fingerprintのモデルでPrefill介入を行う。Residual PatchはEmbedding・各Block出力、Head AblationはW_O入力、MLP AblationはResidualへ加算するMLP出力に対応する。Attention後のResidual Patch・生成中の介入は非対応。極小モデルと小型ランダムQwen3/GPT-2構成の数値テスト、およびQwen3-0.6B実重み検証を分けて記録する。
+
+追加射影はt-SNEを実装し、UMAPは提供しない。Tuned Lensは学習済みlinear_tuned_lensの登録が必要で、通常のQwenモデル重みだけでは利用できない。読込・変換の数値テストを予測品質の検証とは扱わない。詳しくは[研究機能](research.md)を参照。

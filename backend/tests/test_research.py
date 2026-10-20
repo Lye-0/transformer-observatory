@@ -216,6 +216,29 @@ def test_interrupted_study_is_recovered_but_completed_report_survives(tmp_path):
     assert reopened.get("studies", "done")["report"]["result"] == "kept"
 
 
+@pytest.mark.parametrize("kind", ["statistics", "tsne"])
+def test_research_rejects_changed_source_tensor(client, pair, kind):
+    store = client.app.state.store
+    manifest = store.manifest(pair[0])
+    record = next(
+        r for r in manifest["tensors"] if r["kind"] == ("metrics" if kind == "statistics" else "residual")
+    )
+    path = store.tensor_path(pair[0], record)
+    original = path.read_bytes()
+    changed = bytearray(original)
+    changed[-1] ^= 1
+    path.write_bytes(changed)
+    try:
+        item = client.post(
+            "/api/research/studies",
+            json=dict(kind=kind, trace_ids=pair if kind == "statistics" else pair[:1]),
+        ).json()
+        state = wait(client, f"/api/research/studies/{item['id']}")
+        assert state["state"] == "failed" and "ハッシュ" in state["error"]
+    finally:
+        path.write_bytes(original)
+
+
 def make_lens(tmp_path, format="safe", fingerprint=None):
     root = tmp_path / format
     root.mkdir()

@@ -33,6 +33,7 @@ Ctrl+Cでバックエンドを終了します。ブラウザを閉じてもバ�
 4. Level 3/4で取得したAttention・MLPの値をInspectorから調べます。
 5. Trace Libraryから保持・削除・エクスポート・インポートできます。
 6. 同一モデルのLevel 2以上の実験は、両者から計算した共通PCAで比較できます。
+7. ResearchでResidual Patch・Head/MLP Ablation、複数実験の記述統計、全点t-SNEを実行し、条件付きJSON・CSVを出力できます。
 
 このPCではWindows側の `.tools/models/Qwen3-0.6B` を準備済みです。
 Model Managerの「検出済みQwen3-0.6Bを選択」から登録できます。
@@ -75,10 +76,12 @@ mise exec -- pnpm --dir frontend run build
 - [モデル対応](docs/model-support.md)
 - [トレース形式](docs/trace-format.md)
 - [実装範囲と拡張機能](docs/implementation-status.md)
+- [介入・統計・追加射影・Tuned Lens](docs/research.md)
 
 Qwen3-0.6Bは両OSのCUDAで、全28層・2トークン生成・Deep Traceを検証済みです。
 各入力756項目の数値チェックを通過しています。実測時間・メモリ・再現手順は数値検証文書に記載しています。
-GPT-2は小型ランダム構成のアダプター検証まで。量子化、Tuned Lens、介入実験は初期リリースの対象外です。
+GPT-2は小型ランダム構成のアダプター検証まで。量子化は非対応です。
+Tuned Lensは対象モデルに合う学習済みローカル重みを登録すると利用できます。読込・変換の数値テストは実施済みですが、このPCにQwen3用の学習済みLensがなく、その予測品質は未検証です。
 
 localhost APIはHost・Originを検証し、セッションと操作トークンを要求します。
 インターネット向けサーバーとして公開しないでください。
