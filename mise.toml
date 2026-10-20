@@ -1,0 +1,5 @@
+# Shared versions for the Windows and WSL checkouts.
+# Python is managed separately by uv (planned version: 3.13.15).
+[tools]
+node = "24.21.0"
+pnpm = "11.24.0"
