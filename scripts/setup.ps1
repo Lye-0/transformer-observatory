@@ -29,7 +29,11 @@ try {
     Write-Host '準備ができました。 .\scripts\start.ps1 で起動できます。'
 } finally {
     foreach ($variableName in $previousUvEnvironment.Keys) {
-        [Environment]::SetEnvironmentVariable($variableName, $previousUvEnvironment[$variableName], 'Process')
+        if ($null -eq $previousUvEnvironment[$variableName]) {
+            Remove-Item -LiteralPath "Env:$variableName" -ErrorAction SilentlyContinue
+        } else {
+            [Environment]::SetEnvironmentVariable($variableName, $previousUvEnvironment[$variableName], 'Process')
+        }
     }
     Pop-Location
 }
