@@ -168,11 +168,185 @@ textarea {
 }
 select {
   cursor: pointer;
+  line-height: 1.5;
 }
 select option {
   background: #151925;
   color: #e6e7f0;
   padding: 10px;
+}
+select:disabled {
+  cursor: not-allowed;
+  color: var(--muted);
+  opacity: 0.55;
+}
+.select-trigger {
+  display: none;
+}
+
+/* Keep native selection, keyboard navigation and labels; theme the top-layer picker. */
+@supports (appearance: base-select) {
+  select,
+  select::picker(select) {
+    appearance: base-select;
+  }
+  select {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition:
+      border-color 0.15s,
+      background-color 0.15s,
+      box-shadow 0.15s;
+  }
+  select > .select-trigger {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+  }
+  .select-value {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  select::picker-icon {
+    content: '';
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
+    margin: -4px 3px 0 0;
+    border-right: 1.5px solid #9299b0;
+    border-bottom: 1.5px solid #9299b0;
+    transform: rotate(45deg);
+    transition:
+      transform 0.15s,
+      border-color 0.15s;
+  }
+  select:open {
+    border-color: var(--accent);
+    background: #151524;
+    box-shadow: 0 0 0 3px #b2a9ff12;
+  }
+  select:open::picker-icon {
+    margin-top: 4px;
+    border-color: var(--accent);
+    transform: rotate(225deg);
+  }
+  select::picker(select) {
+    min-inline-size: anchor-size(width);
+    inline-size: max-content;
+    max-inline-size: min(36rem, calc(100dvw - 24px));
+    max-block-size: min(320px, calc(100dvh - 32px));
+    margin-block: 6px;
+    padding: 6px;
+    border: 1px solid #45445f;
+    border-radius: 10px;
+    background: #151824;
+    color: #e6e7f0;
+    box-shadow:
+      0 16px 44px #0009,
+      0 3px 10px #0006,
+      inset 0 1px 0 #ffffff06;
+    font: inherit;
+    font-weight: 400;
+    letter-spacing: normal;
+    text-transform: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #65617f #151824;
+  }
+  select option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-block-size: 40px;
+    padding: 10px 12px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: #cbd0e2;
+    font: inherit;
+    line-height: 1.5;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+  select option + option {
+    margin-block-start: 3px;
+  }
+  select option:checked {
+    background: #b2a9ff18;
+    color: #e0d9ff;
+    font-weight: 500;
+  }
+  select option:not(:disabled):hover {
+    background: #b2a9ff25;
+    color: #f0ecff;
+  }
+  select option:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    background: #b2a9ff25;
+    color: #f0ecff;
+  }
+  select option::checkmark {
+    order: 1;
+    margin-inline-start: auto;
+    color: var(--accent);
+    font-size: 14px;
+  }
+  select option:disabled {
+    color: #858b9f;
+    background: transparent;
+    cursor: not-allowed;
+  }
+  select optgroup {
+    padding: 4px;
+    color: var(--muted);
+  }
+  select optgroup > legend {
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+}
+
+@media (forced-colors: active) {
+  select:open,
+  select::picker(select) {
+    border-color: ButtonText;
+  }
+  select option:checked {
+    color: HighlightText;
+    background: Highlight;
+  }
+  select option:focus-visible {
+    outline-color: Highlight;
+  }
+  select option:disabled {
+    color: GrayText;
+  }
+  select::picker-icon,
+  select:open::picker-icon {
+    border-color: ButtonText;
+  }
+  select option::checkmark {
+    color: HighlightText;
+  }
 }
 input[type='checkbox'] {
   accent-color: #a79cff;
@@ -2182,5 +2356,12 @@ td {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+  @supports (appearance: base-select) {
+    select::picker-icon,
+    select::picker(select) {
+      animation: none !important;
+      transition: none !important;
+    }
   }
 }

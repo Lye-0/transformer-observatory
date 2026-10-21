@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { api, coordinates, number, type Manifest } from './api';
+import Select from './Select';
 import TrajectoryScene, { tokenColor } from './TrajectoryScene';
 
 type Props = {
@@ -556,7 +557,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
             {stage + 1} / {m.stages.length} 観測点
           </small>
         </span>
-        <select
+        <Select
           aria-label="生成ステップ"
           value={token?.step || 0}
           onChange={(e) => {
@@ -572,13 +573,13 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                 Decode {t.step}
               </option>
             ))}
-        </select>
-        <select aria-label="再生速度" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+        </Select>
+        <Select aria-label="再生速度" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
           <option value={0.5}>0.5×</option>
           <option value={1}>1×</option>
           <option value={2}>2×</option>
           <option value={4}>4×</option>
-        </select>
+        </Select>
       </div>
       <div className="explorer-footer">
         <span>
@@ -612,7 +613,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
         </summary>
         <div className="comparison-body">
           <div className="button-row">
-            <select
+            <Select
               aria-label="比較する実験"
               value={compareId}
               onChange={(e) => setCompareId(e.target.value)}
@@ -625,13 +626,13 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                     {t.title}
                   </option>
                 ))}
-            </select>
+            </Select>
             <button className="secondary" disabled={!compareId || comparing} onClick={compare}>
               {comparing ? '共通PCAを計算中…' : '比較する'}
             </button>
             {comparison && (
               <>
-                <select
+                <Select
                   aria-label="比較表示"
                   value={compareMode}
                   onChange={(e) => setCompareMode(e.target.value)}
@@ -639,7 +640,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                   <option value="overlay">Overlay</option>
                   <option value="side">Side by Side</option>
                   <option value="difference">Difference Analysis</option>
-                </select>
+                </Select>
                 <button className="text-button" onClick={() => setComparison(null)}>
                   比較を閉じる
                 </button>
@@ -743,7 +744,7 @@ function HeadConnections({ tensor, tokens }: { tensor: any; tokens: Manifest['to
     <div className="attention-connections">
       <label className="field">
         接続を調べるQuery Head
-        <select
+        <Select
           aria-label="接続を調べるQuery Head"
           value={safeHead}
           onChange={(e) => setHead(Number(e.target.value))}
@@ -753,7 +754,7 @@ function HeadConnections({ tensor, tokens }: { tensor: any; tokens: Manifest['to
               Head {tensor.heads?.[i] ?? i}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <p className="subtle-note">
         選択Query位置から各Key位置への係数。上位16接続を表に表示します。行列の全値は成分表示で確認できます。
@@ -853,14 +854,14 @@ function Prediction({
       </p>
       <label className="field">
         読み出し方式
-        <select aria-label="読み出し方式" value={lensId} onChange={(e) => setLensId(e.target.value)}>
+        <Select aria-label="読み出し方式" value={lensId} onChange={(e) => setLensId(e.target.value)}>
           <option value="">Logit Lens</option>
           {lenses.map((l) => (
             <option key={l.id} value={l.id}>
               Tuned Lens · {l.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       {lensId && (
         <p className="subtle-note">

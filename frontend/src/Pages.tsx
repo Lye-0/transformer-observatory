@@ -15,6 +15,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { api, bytes, upload, type Job, type Model } from './api';
+import Select from './Select';
 
 type Common = { onError: (message: string) => void };
 
@@ -133,13 +134,13 @@ export function NewAnalysis({
           </div>
           <label className="field">
             モデル
-            <select aria-label="モデル" value={modelId} onChange={(e) => setModelId(e.target.value)}>
+            <Select aria-label="モデル" value={modelId} onChange={(e) => setModelId(e.target.value)}>
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <div className="model-meta">
             <span>{model?.layers} blocks</span>
@@ -222,19 +223,19 @@ export function NewAnalysis({
               <div className="field-row">
                 <label className="field">
                   デバイス
-                  <select aria-label="デバイス" value={device} onChange={(e) => setDevice(e.target.value)}>
+                  <Select aria-label="デバイス" value={device} onChange={(e) => setDevice(e.target.value)}>
                     <option value="auto">自動</option>
                     <option value="cuda">CUDA</option>
                     <option value="cpu">CPU</option>
-                  </select>
+                  </Select>
                 </label>
                 <label className="field">
                   計算精度
-                  <select aria-label="計算精度" value={dtype} onChange={(e) => setDtype(e.target.value)}>
+                  <Select aria-label="計算精度" value={dtype} onChange={(e) => setDtype(e.target.value)}>
                     {['auto', 'float32', 'float16', 'bfloat16'].map((v) => (
                       <option key={v}>{v}</option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
               </div>
               {level >= 3 && (
@@ -287,7 +288,7 @@ export function NewAnalysis({
                 </label>
                 <label className="field">
                   PCA
-                  <select
+                  <Select
                     aria-label="PCA方式"
                     value={projection}
                     onChange={(e) => setProjection(e.target.value)}
@@ -295,7 +296,7 @@ export function NewAnalysis({
                     <option value="auto">自動</option>
                     <option value="exact">Exact</option>
                     <option value="incremental">Incremental</option>
-                  </select>
+                  </Select>
                 </label>
               </div>
               {generate && (
@@ -640,10 +641,10 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
         </label>
         <label className="field">
           並び順
-          <select aria-label="実験の並び順" value={sort} onChange={(e) => setSort(e.target.value)}>
+          <Select aria-label="実験の並び順" value={sort} onChange={(e) => setSort(e.target.value)}>
             <option value="date">新しい順</option>
             <option value="size">容量が大きい順</option>
-          </select>
+          </Select>
         </label>
       </div>
       {editing && (
