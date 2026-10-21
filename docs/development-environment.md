@@ -28,9 +28,10 @@ WSLのmise本体はユーザーが導入済み。Node・pnpm・Python・依存�
 
 ## モデル
 
-当面は極小TransformerとQwen3-0.6Bのみを実機検証対象とし、大規模モデル実験を行わない。
-Windows用Qwen3-0.6Bは `.tools/models/Qwen3-0.6B` に配置済み。WSLは既存のHugging Faceローカルキャッシュを参照する。モデル重みはGitへ追加しない。
-登録パスはOSごとに異なるが、fingerprintは一致する。
+数値検証用の極小Transformerに加え、Qwen3-0.6BとGPT-2 Smallの実重みを両OSで検証した記録がある。大規模モデル実験は現在の対象外。
+モデル重みはGitへ追加せず、OSごとに保存場所を登録する。2026-10-20の両OS検証ではfingerprintの一致を確認した。
+`.tools/models/` はモデルの配置候補であり、現在もファイルが存在することを保証しない。2026-10-21の確認ではWindowsの従来のQwen3-0.6B／GPT-2配置先は存在しなかった。
+現在の配置・対応範囲はModel Managerで確認する。標準キャッシュ・任意の探索先の検出、パス入力、フォルダー選択と再指定は[ローカルモデルの登録](model-registration.md)を参照。
 
 ## このPCで確認した点
 

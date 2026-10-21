@@ -79,6 +79,8 @@ export type Model = {
   capabilities: Record<string, any>;
   fingerprint: string;
   path?: string;
+  available?: boolean;
+  availability_reason?: string;
 };
 export type Manifest = {
   id: string;

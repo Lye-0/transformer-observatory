@@ -6,6 +6,8 @@ from types import SimpleNamespace
 import torch
 from torch import nn
 
+from .model_discovery import inspect_model
+
 TINY_ID = "tiny-transformer"
 
 
@@ -133,21 +135,29 @@ def tiny_registration():
 
 
 def register_model(path, name=""):
-    root = Path(path).expanduser().resolve()
-    if not root.is_dir() or not (root / "config.json").is_file():
-        raise ValueError("config.jsonを含むローカルモデルフォルダーを指定してください")
+    inspection = inspect_model(path)
+    if inspection["status"] != "available":
+        raise ValueError(inspection["reason"])
+    root = Path(inspection["path"])
     config_bytes = (root / "config.json").read_bytes()
     config = json.loads(config_bytes)
-    architecture = config.get("model_type")
-    if architecture not in {"qwen3", "gpt2"}:
-        raise ValueError(f"未対応アーキテクチャ: {architecture}。現在はQwen3/GPT-2を対象にします")
-    if config.get("quantization_config"):
-        raise ValueError("量子化モデルの内部取得は未検証のため、現在は登録できません")
-    if config.get("sliding_window") and config.get("use_sliding_window"):
-        raise ValueError("Sliding-window Attentionの取得は未検証です")
+    architecture = config["model_type"]
     weight_files = sorted(root.glob("*.safetensors"))
-    if not weight_files:
-        raise ValueError("安全なsafetensors形式のモデル重みが必要です")
+    from transformers import AutoTokenizer
+
+    try:
+        AutoTokenizer.from_pretrained(root, local_files_only=True, trust_remote_code=False)
+    except Exception as exc:
+        raise ValueError("Tokenizerを読み込めません。対応するTokenizerファイルを確認してください") from exc
+    from safetensors import safe_open
+
+    try:
+        for weight_file in weight_files:
+            with safe_open(weight_file, framework="pt", device="cpu") as weights:
+                if not weights.keys():
+                    raise ValueError("重みが空です")
+    except Exception as exc:
+        raise ValueError("safetensorsの重みを読み取れません。ダウンロード完了とファイルを確認してください") from exc
     # Hash actual weights and tokenizer artifacts, not just a directory name.
     fingerprint = hashlib.sha256(config_bytes)
     for f in (
@@ -165,7 +175,7 @@ def register_model(path, name=""):
         raise ValueError("Tokenizerのファイルがありません")
     return dict(
         id=hashlib.sha256(str(root).encode()).hexdigest()[:16],
-        name=name or root.name,
+        name=name or inspection["name"],
         path=str(root),
         architecture=architecture,
         fingerprint=fingerprint.hexdigest(),

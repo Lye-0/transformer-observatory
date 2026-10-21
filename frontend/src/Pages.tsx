@@ -24,8 +24,17 @@ export function NewAnalysis({
   onJob,
   onError,
   initialRequest,
-}: Common & { models: Model[]; onJob: (job: Job) => void; initialRequest?: Record<string, any> }) {
-  const [modelId, setModelId] = useState(models.find((m) => m.trained)?.id || 'tiny-transformer');
+  modelId,
+  onModelChange: setModelId,
+  onAddModel,
+}: Common & {
+  models: Model[];
+  onJob: (job: Job) => void;
+  initialRequest?: Record<string, any>;
+  modelId: string;
+  onModelChange: (id: string) => void;
+  onAddModel: () => void;
+}) {
   const [prompt, setPrompt] = useState('The quiet sky is full of possibilities.');
   const [title, setTitle] = useState('');
   const [level, setLevel] = useState(2);
@@ -63,7 +72,7 @@ export function NewAnalysis({
     setTemperature(r.temperature ?? 0);
     setTopP(r.top_p ?? 1);
     setProjection(r.projection || 'auto');
-  }, [initialRequest]);
+  }, [initialRequest, setModelId]);
   const indices = (text: string) => (text.trim() ? text.split(',').map((x) => Number(x.trim())) : []);
   const payload = () => ({
     model_id: modelId,
@@ -132,16 +141,51 @@ export function NewAnalysis({
             </span>
             <span className="mono muted">LOCAL INFERENCE</span>
           </div>
-          <label className="field">
-            モデル
-            <Select aria-label="モデル" value={modelId} onChange={(e) => setModelId(e.target.value)}>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </Select>
-          </label>
+          <div className="model-choice">
+            <label className="field">
+              モデル
+              <Select aria-label="モデル" value={modelId} onChange={(e) => setModelId(e.target.value)}>
+                {models.some((m) => m.trained) && (
+                  <optgroup label="登録したモデル">
+                    {models
+                      .filter((m) => m.trained)
+                      .map((m) => (
+                        <option key={m.id} value={m.id} disabled={m.available === false}>
+                          {m.name}
+                          {m.available === false ? '（保存場所を確認）' : ''}
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+                <optgroup label="検証用">
+                  {models
+                    .filter((m) => !m.trained)
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                </optgroup>
+              </Select>
+            </label>
+            <button className="secondary" onClick={onAddModel}>
+              <Plus size={16} />
+              モデルを追加
+            </button>
+          </div>
+          {!models.some((m) => m.trained) && (
+            <p className="model-empty">
+              実モデルはまだ登録されていません。「モデルを追加」から検出・保存場所の指定ができます。
+            </p>
+          )}
+          {model?.available === false && (
+            <div className="model-unavailable" role="status">
+              <p>{model.availability_reason}</p>
+              <button className="text-button" onClick={onAddModel}>
+                Model Managerで保存場所を再指定
+              </button>
+            </div>
+          )}
           <div className="model-meta">
             <span>{model?.layers} blocks</span>
             <span>{model?.hidden_size} dimensions</span>
@@ -328,10 +372,18 @@ export function NewAnalysis({
             </div>
           </details>
           <div className="form-actions">
-            <button className="secondary" disabled={busy || !prompt} onClick={() => check(false)}>
+            <button
+              className="secondary"
+              disabled={busy || !prompt || !model || model.available === false}
+              onClick={() => check(false)}
+            >
               トークン・容量を確認
             </button>
-            <button className="primary" disabled={busy || !prompt} onClick={() => check(true)}>
+            <button
+              className="primary"
+              disabled={busy || !prompt || !model || model.available === false}
+              onClick={() => check(true)}
+            >
               {busy ? <Loader2 className="spin" size={17} /> : <ArrowRight size={17} />}解析を開始
             </button>
           </div>
@@ -435,120 +487,7 @@ export function NewAnalysis({
   );
 }
 
-export function ModelManager({
-  models,
-  reload,
-  onError,
-}: Common & { models: Model[]; reload: () => Promise<void> }) {
-  const [path, setPath] = useState('');
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  useEffect(() => {
-    api('models/discover-local')
-      .then((d) => setSuggestions(d.paths))
-      .catch((e) => onError(String(e)));
-  }, []);
-  async function register() {
-    setBusy(true);
-    try {
-      await api('models/register', 'POST', { path, name });
-      await reload();
-      setPath('');
-    } catch (e) {
-      onError(String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="page">
-      <div className="eyebrow">MODEL MANAGER</div>
-      <h1>観測するモデル。</h1>
-      <p className="page-intro">
-        バックエンドOS上のローカルモデルを登録します。重みとTokenizerを識別し、取得できる範囲を表示します。
-      </p>
-      <section className="panel">
-        <div className="panel-heading">
-          <span>
-            <FolderOpen size={17} /> ローカルモデルを登録
-          </span>
-        </div>
-        <div className="field-row">
-          <label className="field grow">
-            モデルフォルダーの絶対パス
-            <input
-              value={path}
-              onChange={(e) => setPath(e.target.value)}
-              placeholder="config.json・Tokenizer・safetensorsを含むフォルダー"
-            />
-          </label>
-          <label className="field">
-            表示名（任意）
-            <input value={name} onChange={(e) => setName(e.target.value)} />
-          </label>
-        </div>
-        <div className="form-actions">
-          {suggestions.map((p) => (
-            <button
-              key={p}
-              className="text-button"
-              onClick={() => {
-                setPath(p);
-                setName('Qwen3-0.6B');
-              }}
-            >
-              検出済みQwen3-0.6Bを選択
-            </button>
-          ))}
-          <button className="primary" disabled={!path || busy} onClick={register}>
-            {busy ? <Loader2 size={17} className="spin" /> : <Plus size={17} />}登録する
-          </button>
-        </div>
-        <p className="subtle-note">
-          現在はQwen3／GPT-2のsafetensors形式を対象にします。カスタムコードの実行は無効です。
-        </p>
-      </section>
-      <div className="model-list">
-        {models.map((m) => (
-          <section key={m.id} className="panel model-card">
-            <div className="model-card-top">
-              <div className="model-icon">
-                <Cpu />
-              </div>
-              <div>
-                <h3>{m.name}</h3>
-                <span className="mono muted">
-                  {m.architecture} · {m.layers} blocks · d={m.hidden_size}
-                </span>
-              </div>
-              <span className="tag">LOCAL</span>
-            </div>
-            <div className="capabilities">
-              {[
-                'residual',
-                'attention',
-                'mlp',
-                'generation',
-                'quantization',
-                'interventions',
-                'tuned_lens',
-              ].map((key) => (
-                <div key={key}>
-                  <span>{key}</span>
-                  <b className={m.capabilities[key] === '検証済み' ? 'good' : 'muted'}>
-                    {m.capabilities[key]}
-                  </b>
-                </div>
-              ))}
-            </div>
-            {m.path && <p className="path-note">{m.path}</p>}
-          </section>
-        ))}
-      </div>
-    </div>
-  );
-}
+export { default as ModelManager } from './ModelManager';
 
 export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => void }) {
   const [traces, setTraces] = useState<any[]>([]);
