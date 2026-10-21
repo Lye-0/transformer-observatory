@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { Token } from './api';
-import { pickObservation, rotationSpeed, type Observation } from './trajectoryInteraction';
+import {
+  focusedCameraPosition,
+  navigationTarget,
+  pickObservation,
+  type Observation,
+} from './trajectoryInteraction';
 
 function markerTexture(ring = false) {
   const canvas = document.createElement('canvas');
@@ -85,8 +90,9 @@ export default function TrajectoryScene(props: Props) {
         };
     };
     controls.addEventListener('change', publishCamera);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.09;
+    // Direct manipulation: no frame-rate-dependent lag or rotation after release.
+    controls.enableDamping = false;
+    controls.rotateSpeed = 0.55;
     controls.screenSpacePanning = true;
     controls.zoomSpeed = 0.65;
     controls.zoomToCursor = true;
@@ -102,16 +108,9 @@ export default function TrajectoryScene(props: Props) {
     const center = bounds.getCenter(new THREE.Vector3());
     const radius = bounds.getSize(new THREE.Vector3()).length() / 2 || 1;
     const homeOffset = new THREE.Vector3(radius * 1.25, radius * 0.65, radius * 2.4);
-    controls.minDistance = radius * 0.002;
+    controls.minDistance = radius * 0.00004;
     controls.maxDistance = radius * 40;
-    const settleControls = () => {
-      // Clear residual damping before a programmatic camera change.
-      controls.enableDamping = false;
-      controls.update();
-      controls.enableDamping = true;
-    };
     resetView.current = () => {
-      settleControls();
       const fit = Math.max(1, 1 / camera.aspect);
       camera.position.copy(center).addScaledVector(homeOffset, fit);
       controls.target.copy(center);
@@ -229,7 +228,36 @@ export default function TrajectoryScene(props: Props) {
     const arrowGroup = new THREE.Group();
     scene.add(arrowGroup);
     let hovered: Observation | null = null;
+    const activePointers = new Set<number>();
     let pointerDown: { x: number; y: number; id: number; dragged: boolean } | null = null;
+    const anchorNavigation = (event: MouseEvent) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      const p = live.current;
+      const target = navigationTarget({
+        data: props.overlay ? [data, props.overlay] : [data],
+        stages,
+        lastStage: p.growth ? p.stage : stages - 1,
+        camera,
+        width: rect.width,
+        height: rect.height,
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      });
+      if (!target) return;
+      controls.target.copy(target);
+      controls.maxDistance = Math.max(radius * 40, camera.position.distanceTo(target) * 2);
+      controls.update();
+      publishCamera();
+    };
+    const beginNavigation = (event: PointerEvent) => {
+      // Capture runs before OrbitControls starts a pan, orbit or touch gesture.
+      // Keep one pivot for the entire gesture, including a second touch pointer.
+      if (!activePointers.size) anchorNavigation(event);
+      activePointers.add(event.pointerId);
+    };
+    const wheelNavigation = (event: WheelEvent) => {
+      if (!activePointers.size) anchorNavigation(event);
+    };
     const pick = (event: MouseEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
       const p = live.current;
@@ -268,12 +296,12 @@ export default function TrajectoryScene(props: Props) {
       renderer.domElement.style.cursor = next ? 'pointer' : 'grab';
     };
     const down = (e: PointerEvent) => {
-      controls.rotateSpeed = rotationSpeed(camera.position.distanceTo(controls.target), radius);
       if (e.isPrimary) pointerDown = { x: e.clientX, y: e.clientY, id: e.pointerId, dragged: false };
       else if (pointerDown) pointerDown.dragged = true;
       renderer.domElement.style.cursor = 'grabbing';
     };
     const up = (e: PointerEvent) => {
+      activePointers.delete(e.pointerId);
       const start = pointerDown;
       pointerDown = null;
       renderer.domElement.style.cursor = 'grab';
@@ -294,22 +322,24 @@ export default function TrajectoryScene(props: Props) {
         renderer.domElement.style.cursor = 'pointer';
       }
     };
-    const cancel = () => {
+    const cancel = (event: PointerEvent) => {
+      activePointers.delete(event.pointerId);
       pointerDown = null;
       clearHover();
     };
     const focus = (event: MouseEvent) => {
       const hit = pick(event);
       if (!hit) return;
-      settleControls();
       const target = new THREE.Vector3().fromArray(data, (hit.token * stages + hit.stage) * 3);
-      camera.position.add(target.clone().sub(controls.target));
+      camera.position.copy(focusedCameraPosition(camera, target));
       controls.target.copy(target);
       controls.update();
       publishCamera();
       clearHover();
     };
     renderer.domElement.style.cursor = 'grab';
+    renderer.domElement.addEventListener('pointerdown', beginNavigation, true);
+    renderer.domElement.addEventListener('wheel', wheelNavigation, { capture: true, passive: true });
     renderer.domElement.addEventListener('pointermove', move);
     renderer.domElement.addEventListener('pointerdown', down);
     renderer.domElement.addEventListener('pointerup', up);
@@ -430,14 +460,12 @@ export default function TrajectoryScene(props: Props) {
               );
           }
       }
-      controls.rotateSpeed = rotationSpeed(camera.position.distanceTo(controls.target), radius);
       if (
         p.cameraBus?.current &&
         p.cameraBus.current.source !== source &&
         p.cameraBus.current !== lastCameraMessage
       ) {
         applyingCamera = true;
-        settleControls();
         camera.position.fromArray(p.cameraBus.current.position);
         controls.target.fromArray(p.cameraBus.current.target);
         controls.update();
@@ -458,6 +486,8 @@ export default function TrajectoryScene(props: Props) {
       cancelAnimationFrame(animation);
       resize.disconnect();
       resetView.current = null;
+      renderer.domElement.removeEventListener('pointerdown', beginNavigation, true);
+      renderer.domElement.removeEventListener('wheel', wheelNavigation, true);
       renderer.domElement.removeEventListener('pointermove', move);
       renderer.domElement.removeEventListener('pointerdown', down);
       renderer.domElement.removeEventListener('pointerup', up);
