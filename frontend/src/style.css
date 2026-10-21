@@ -2034,13 +2034,6 @@ input[type='range'] {
   margin: 9px 0;
   overflow-wrap: anywhere;
 }
-.heatmap {
-  width: 100%;
-  max-height: 155px;
-  image-rendering: pixelated;
-  object-fit: fill;
-  margin: 3px 0 10px;
-}
 .tensor-block .subtle-note {
   margin-bottom: 5px;
 }
@@ -2075,33 +2068,6 @@ input[type='range'] {
 .not-captured p {
   font-size: 12px;
   line-height: 2;
-}
-.pins {
-  border-top: 1px solid #353047;
-  margin-top: 20px;
-  padding-top: 8px;
-}
-.pins > .panel-label {
-  padding: 10px 0;
-}
-.pins > div:not(.panel-label) {
-  margin: 10px 0;
-  padding: 10px;
-  border: 1px solid #3e3651;
-  border-radius: 5px;
-}
-.pins b {
-  font-size: 12px;
-  font-weight: 400;
-  display: block;
-  line-height: 1.9;
-}
-.pins small {
-  font:
-    12px Consolas,
-    monospace;
-  line-height: 1.9;
-  color: #b2abc7;
 }
 .timeline {
   display: flex;
