@@ -2,6 +2,24 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { Token } from './api';
+import { pickObservation, rotationSpeed, type Observation } from './trajectoryInteraction';
+
+function markerTexture(ring = false) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const context = canvas.getContext('2d')!;
+  context.beginPath();
+  context.arc(32, 32, ring ? 26 : 28, 0, Math.PI * 2);
+  if (ring) {
+    context.strokeStyle = '#ffffff';
+    context.lineWidth = 8;
+    context.stroke();
+  } else {
+    context.fillStyle = '#ffffff';
+    context.fill();
+  }
+  return new THREE.CanvasTexture(canvas);
+}
 
 type Props = {
   data: Float32Array;
@@ -33,10 +51,12 @@ export default function TrajectoryScene(props: Props) {
   const cameraState = useRef<{ position: number[]; target: number[] } | null>(null);
   const [fps, setFps] = useState(0);
   const [error, setError] = useState('');
-  const [hover, setHover] = useState<number | null>(null);
+  const [hover, setHover] = useState<Observation | null>(null);
+  const resetView = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const host = container.current!;
+    setHover(null);
     let renderer: THREE.WebGLRenderer;
     try {
       renderer = new THREE.WebGLRenderer({ antialias: !props.lowPower, alpha: true });
@@ -68,6 +88,8 @@ export default function TrajectoryScene(props: Props) {
     controls.enableDamping = true;
     controls.dampingFactor = 0.09;
     controls.screenSpacePanning = true;
+    controls.zoomSpeed = 0.65;
+    controls.zoomToCursor = true;
     const data = props.data,
       n = props.count,
       stages = props.stages;
@@ -78,16 +100,34 @@ export default function TrajectoryScene(props: Props) {
       for (let i = 0; i < props.overlay.length; i += 3)
         bounds.expandByPoint(vector.fromArray(props.overlay, i));
     const center = bounds.getCenter(new THREE.Vector3());
-    const radius = Math.max(bounds.getSize(new THREE.Vector3()).length() / 2, 1);
+    const radius = bounds.getSize(new THREE.Vector3()).length() / 2 || 1;
+    const homeOffset = new THREE.Vector3(radius * 1.25, radius * 0.65, radius * 2.4);
+    controls.minDistance = radius * 0.002;
+    controls.maxDistance = radius * 40;
+    const settleControls = () => {
+      // Clear residual damping before a programmatic camera change.
+      controls.enableDamping = false;
+      controls.update();
+      controls.enableDamping = true;
+    };
+    resetView.current = () => {
+      settleControls();
+      const fit = Math.max(1, 1 / camera.aspect);
+      camera.position.copy(center).addScaledVector(homeOffset, fit);
+      controls.target.copy(center);
+      controls.update();
+      publishCamera();
+    };
     const saved = cameraState.current;
     if (saved) {
       camera.position.fromArray(saved.position);
       controls.target.fromArray(saved.target);
     } else {
-      camera.position.copy(center).add(new THREE.Vector3(radius * 1.25, radius * 0.65, radius * 2.4));
+      camera.position.copy(center).add(homeOffset);
       controls.target.copy(center);
     }
-    camera.far = Math.max(1000, radius * 100);
+    camera.far = radius * 100;
+    camera.near = radius * 0.00001;
     camera.updateProjectionMatrix();
     const group = new THREE.Group();
     scene.add(group);
@@ -118,9 +158,48 @@ export default function TrajectoryScene(props: Props) {
     pointGeometry.setAttribute('color', new THREE.BufferAttribute(pointColors, 3));
     const points = new THREE.Points(
       pointGeometry,
-      new THREE.PointsMaterial({ size: radius * 0.014, vertexColors: true, sizeAttenuation: true }),
+      new THREE.PointsMaterial({
+        size: 8,
+        vertexColors: true,
+        sizeAttenuation: false,
+        map: markerTexture(),
+        transparent: true,
+        alphaTest: 0.1,
+        depthWrite: false,
+      }),
     );
     group.add(points);
+    // Stage-major markers allow growth mode to reveal exactly the same points
+    // as its line segments, without dropping any measured observations.
+    const observationPositions = new Float32Array(n * stages * 3);
+    const observationColors = new Float32Array(observationPositions.length);
+    for (let s = 0; s < stages; s++)
+      for (let t = 0; t < n; t++)
+        observationPositions.set(
+          data.subarray((t * stages + s) * 3, (t * stages + s) * 3 + 3),
+          (s * n + t) * 3,
+        );
+    const observationGeometry = new THREE.BufferGeometry();
+    observationGeometry.setAttribute('position', new THREE.BufferAttribute(observationPositions, 3));
+    observationGeometry.setAttribute('color', new THREE.BufferAttribute(observationColors, 3));
+    const observationMaterial = points.material.clone();
+    observationMaterial.size = 5;
+    const observations = new THREE.Points(observationGeometry, observationMaterial);
+    group.add(observations);
+    const selectionGeometry = new THREE.BufferGeometry();
+    const selectionPositions = new Float32Array(n * 3);
+    selectionGeometry.setAttribute('position', new THREE.BufferAttribute(selectionPositions, 3));
+    selectionGeometry.setDrawRange(0, 0);
+    const selectionMaterial = new THREE.PointsMaterial({
+      size: 16,
+      sizeAttenuation: false,
+      map: markerTexture(true),
+      transparent: true,
+      alphaTest: 0.1,
+      depthWrite: false,
+    });
+    const selection = new THREE.Points(selectionGeometry, selectionMaterial);
+    group.add(selection);
     let overlayGeometry: THREE.BufferGeometry | undefined,
       overlayMaterial: THREE.LineBasicMaterial | undefined;
     if (props.overlay) {
@@ -149,67 +228,102 @@ export default function TrajectoryScene(props: Props) {
     scene.add(axes);
     const arrowGroup = new THREE.Group();
     scene.add(arrowGroup);
-    const raycaster = new THREE.Raycaster();
-    raycaster.params.Line = { threshold: radius * 0.008 };
-    let hovered: number | null = null,
-      pointerDown = { x: 0, y: 0 };
-    const pick = (event: PointerEvent) => {
+    let hovered: Observation | null = null;
+    let pointerDown: { x: number; y: number; id: number; dragged: boolean } | null = null;
+    const pick = (event: MouseEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
-      const pointer = new THREE.Vector2(
-        ((event.clientX - rect.left) / rect.width) * 2 - 1,
-        (-(event.clientY - rect.top) / rect.height) * 2 + 1,
-      );
-      raycaster.setFromCamera(pointer, camera);
-      const hit = raycaster.intersectObject(lines)[0];
-      return hit && hit.index !== undefined ? Math.floor(hit.index / 2) % n : null;
+      const p = live.current;
+      camera.updateMatrixWorld();
+      return pickObservation({
+        data,
+        count: n,
+        stages,
+        lastStage: p.growth ? p.stage : stages - 1,
+        activeStage: p.stage,
+        selected: p.selected,
+        camera,
+        width: rect.width,
+        height: rect.height,
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      });
+    };
+    const clearHover = () => {
+      hovered = null;
+      setHover(null);
+      renderer.domElement.style.cursor = pointerDown ? 'grabbing' : 'grab';
     };
     const move = (event: PointerEvent) => {
+      if (pointerDown) {
+        if (Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y) > 5)
+          pointerDown.dragged = true;
+        clearHover();
+        return;
+      }
       const next = pick(event);
-      if (next !== hovered) {
+      if (next?.token !== hovered?.token || next?.stage !== hovered?.stage) {
         hovered = next;
         setHover(next);
       }
+      renderer.domElement.style.cursor = next ? 'pointer' : 'grab';
     };
     const down = (e: PointerEvent) => {
-      pointerDown = { x: e.clientX, y: e.clientY };
+      controls.rotateSpeed = rotationSpeed(camera.position.distanceTo(controls.target), radius);
+      if (e.isPrimary) pointerDown = { x: e.clientX, y: e.clientY, id: e.pointerId, dragged: false };
+      else if (pointerDown) pointerDown.dragged = true;
+      renderer.domElement.style.cursor = 'grabbing';
     };
     const up = (e: PointerEvent) => {
-      if (Math.hypot(e.clientX - pointerDown.x, e.clientY - pointerDown.y) > 5) return;
-      const t = pick(e);
-      if (t !== null) {
-        live.current.onSelect(t, e.ctrlKey || e.metaKey);
-        const hit = raycaster.intersectObject(lines)[0];
-        if (hit?.index !== undefined) {
-          const segment = Math.floor(hit.index / 2),
-            endpoint = Math.floor(segment / n) + 1;
-          const start = new THREE.Vector3().fromArray(positions, segment * 6);
-          const end = new THREE.Vector3().fromArray(positions, segment * 6 + 3);
-          live.current.onStage?.(
-            hit.point.distanceTo(start) < hit.point.distanceTo(end) ? endpoint - 1 : endpoint,
-          );
-        }
+      const start = pointerDown;
+      pointerDown = null;
+      renderer.domElement.style.cursor = 'grab';
+      if (
+        !start ||
+        start.id !== e.pointerId ||
+        e.button !== 0 ||
+        start.dragged ||
+        Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5
+      )
+        return;
+      const hit = pick(e);
+      if (hit) {
+        live.current.onSelect(hit.token, e.ctrlKey || e.metaKey);
+        live.current.onStage?.(hit.stage);
+        hovered = hit;
+        setHover(hit);
+        renderer.domElement.style.cursor = 'pointer';
       }
     };
-    const focus = (event: MouseEvent) => {
-      const rect = renderer.domElement.getBoundingClientRect();
-      raycaster.setFromCamera(
-        new THREE.Vector2(
-          ((event.clientX - rect.left) / rect.width) * 2 - 1,
-          (-(event.clientY - rect.top) / rect.height) * 2 + 1,
-        ),
-        camera,
-      );
-      const hit = raycaster.intersectObject(lines)[0];
-      if (hit) controls.target.copy(hit.point);
+    const cancel = () => {
+      pointerDown = null;
+      clearHover();
     };
+    const focus = (event: MouseEvent) => {
+      const hit = pick(event);
+      if (!hit) return;
+      settleControls();
+      const target = new THREE.Vector3().fromArray(data, (hit.token * stages + hit.stage) * 3);
+      camera.position.add(target.clone().sub(controls.target));
+      controls.target.copy(target);
+      controls.update();
+      publishCamera();
+      clearHover();
+    };
+    renderer.domElement.style.cursor = 'grab';
     renderer.domElement.addEventListener('pointermove', move);
     renderer.domElement.addEventListener('pointerdown', down);
     renderer.domElement.addEventListener('pointerup', up);
+    renderer.domElement.addEventListener('pointercancel', cancel);
+    renderer.domElement.addEventListener('pointerleave', clearHover);
+    renderer.domElement.addEventListener('wheel', clearHover);
     renderer.domElement.addEventListener('dblclick', focus);
+    let firstResize = true;
     const resize = new ResizeObserver(() => {
       camera.aspect = host.clientWidth / Math.max(host.clientHeight, 1);
       camera.updateProjectionMatrix();
       renderer.setSize(host.clientWidth, host.clientHeight);
+      if (firstResize && !saved) resetView.current?.();
+      firstResize = false;
     });
     resize.observe(host);
     let animation = 0,
@@ -218,19 +332,22 @@ export default function TrajectoryScene(props: Props) {
       lastRender = 0,
       signature = '';
     let lastMetrics: Float32Array | undefined;
+    let lastCameraMessage: unknown;
     const render = (now: number) => {
       animation = requestAnimationFrame(render);
       if (live.current.lowPower && now - lastRender < 32) return;
       lastRender = now;
       const p = live.current,
-        key = `${p.stage}:${p.selected.join(',')}:${p.growth}:${p.intensity}:${p.arrows}:${hovered}`;
+        key = `${p.stage}:${p.selected.join(',')}:${p.growth}:${p.intensity}:${p.arrows}:${hovered?.token}`;
       if (lastMetrics !== p.metrics) {
         signature = '';
         lastMetrics = p.metrics;
       }
       if (key !== signature) {
         signature = key;
+        const selectedTokens = new Set(p.selected);
         geometry.setDrawRange(0, p.growth ? p.stage * n * 2 : positions.length / 3);
+        observationGeometry.setDrawRange(0, (p.growth ? p.stage + 1 : stages) * n);
         if (overlayGeometry) {
           const otherCount = props.overlay!.length / stages / 3;
           overlayGeometry.setDrawRange(
@@ -244,7 +361,7 @@ export default function TrajectoryScene(props: Props) {
         for (let s = 1; s < stages; s++)
           for (let t = 0; t < n; t++) {
             color.set(tokenColor(t));
-            const selected = p.selected.includes(t) || hovered === t;
+            const selected = selectedTokens.has(t) || hovered?.token === t;
             const brightness = p.selected.length && !selected ? 0.22 : 1;
             const intensity =
               p.intensity && p.metrics
@@ -257,6 +374,15 @@ export default function TrajectoryScene(props: Props) {
             colors.set([color.r, color.g, color.b, color.r, color.g, color.b], base);
           }
         geometry.attributes.color.needsUpdate = true;
+        for (let s = 0; s < stages; s++)
+          for (let t = 0; t < n; t++) {
+            color.set(tokenColor(t));
+            if (p.selected.length && !selectedTokens.has(t) && hovered?.token !== t)
+              color.multiplyScalar(0.45);
+            observationColors.set([color.r, color.g, color.b], (s * n + t) * 3);
+          }
+        observationGeometry.attributes.color.needsUpdate = true;
+        let selectedCount = 0;
         for (let t = 0; t < n; t++) {
           pointPositions.set(
             data.subarray((t * stages + p.stage) * 3, (t * stages + p.stage) * 3 + 3),
@@ -264,9 +390,18 @@ export default function TrajectoryScene(props: Props) {
           );
           color.set(tokenColor(t));
           pointColors.set([color.r, color.g, color.b], t * 3);
+          if (selectedTokens.has(t)) {
+            selectionPositions.set(pointPositions.subarray(t * 3, t * 3 + 3), selectedCount * 3);
+            selectedCount++;
+          }
         }
         pointGeometry.attributes.position.needsUpdate = true;
         pointGeometry.attributes.color.needsUpdate = true;
+        selectionGeometry.setDrawRange(0, selectedCount);
+        selectionGeometry.attributes.position.needsUpdate = true;
+        // Positions move as the stage changes; cached bounds must follow them.
+        pointGeometry.computeBoundingSphere();
+        selectionGeometry.computeBoundingSphere();
         for (const child of [...arrowGroup.children]) {
           arrowGroup.remove(child);
           if (child instanceof THREE.ArrowHelper) {
@@ -295,14 +430,20 @@ export default function TrajectoryScene(props: Props) {
               );
           }
       }
-      if (p.cameraBus?.current && p.cameraBus.current.source !== source) {
+      controls.rotateSpeed = rotationSpeed(camera.position.distanceTo(controls.target), radius);
+      if (
+        p.cameraBus?.current &&
+        p.cameraBus.current.source !== source &&
+        p.cameraBus.current !== lastCameraMessage
+      ) {
         applyingCamera = true;
+        settleControls();
         camera.position.fromArray(p.cameraBus.current.position);
         controls.target.fromArray(p.cameraBus.current.target);
         controls.update();
+        lastCameraMessage = p.cameraBus.current;
         applyingCamera = false;
-      }
-      controls.update();
+      } else controls.update();
       renderer.render(scene, camera);
       frames++;
       if (now - lastFps > 1500) {
@@ -316,11 +457,25 @@ export default function TrajectoryScene(props: Props) {
       cameraState.current = { position: camera.position.toArray(), target: controls.target.toArray() };
       cancelAnimationFrame(animation);
       resize.disconnect();
+      resetView.current = null;
+      renderer.domElement.removeEventListener('pointermove', move);
+      renderer.domElement.removeEventListener('pointerdown', down);
+      renderer.domElement.removeEventListener('pointerup', up);
+      renderer.domElement.removeEventListener('pointercancel', cancel);
+      renderer.domElement.removeEventListener('pointerleave', clearHover);
+      renderer.domElement.removeEventListener('wheel', clearHover);
+      renderer.domElement.removeEventListener('dblclick', focus);
       controls.dispose();
       geometry.dispose();
       pointGeometry.dispose();
+      observationGeometry.dispose();
+      selectionGeometry.dispose();
       material.dispose();
-      (points.material as THREE.Material).dispose();
+      points.material.map?.dispose();
+      points.material.dispose();
+      observationMaterial.dispose();
+      selectionMaterial.map?.dispose();
+      selectionMaterial.dispose();
       overlayGeometry?.dispose();
       overlayMaterial?.dispose();
       for (const child of arrowGroup.children)
@@ -354,12 +509,31 @@ export default function TrajectoryScene(props: Props) {
         {fps} FPS · {props.lowPower ? '軽量表示' : 'WebGL2'}
         {fps > 0 && fps < 20 ? ' · 軽量表示を推奨' : ''}
       </div>
+      <div className="scene-tools">
+        <button className="button secondary" onClick={() => resetView.current?.()}>
+          全体を表示
+        </button>
+      </div>
       {hover !== null && (
         <div className="scene-hover">
-          #{hover} · {props.tokens[hover]?.raw}
+          #{hover.token} · {props.tokens[hover.token]?.raw} · 観測点 {hover.stage + 1}/{props.stages}
         </div>
       )}
       <div className="scene-help">
+        <div className="scene-legend">
+          <span>
+            <i className="observation-dot" />
+            観測点（クリック可）
+          </span>
+          <span>
+            <i className="current-dot" />
+            現在の段階
+          </span>
+          <span>
+            <i className="selected-dot" />
+            選択中
+          </span>
+        </div>
         ドラッグで回転 · 右ドラッグで移動 · ホイールで拡大 · ダブルクリックで注視
       </div>
     </div>

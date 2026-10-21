@@ -1825,10 +1825,54 @@ input[type='range'] {
   color: #7986a2;
   pointer-events: none;
 }
+.scene-tools {
+  position: absolute;
+  right: 15px;
+  top: 42px;
+}
+.scene-tools .button {
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.scene-legend {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-bottom: 7px;
+  color: #a2adc6;
+}
+.scene-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.scene-legend i {
+  display: inline-block;
+  border-radius: 50%;
+  flex: none;
+}
+.observation-dot {
+  width: 5px;
+  height: 5px;
+  background: #a2adc6;
+}
+.current-dot {
+  width: 8px;
+  height: 8px;
+  background: #b3a4f6;
+}
+.selected-dot {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  background: radial-gradient(circle, #b3a4f6 0 3px, transparent 3px);
+}
 .scene-hover {
   position: absolute;
   left: 20px;
-  bottom: 45px;
+  bottom: 75px;
   border: 1px solid #4c4563;
   border-radius: 4px;
   background: #171423df;
