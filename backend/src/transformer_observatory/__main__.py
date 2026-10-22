@@ -30,7 +30,13 @@ def main():
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, args=(f"http://127.0.0.1:{port}",)).start()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="info"))
-    server.run(sockets=[sock])
+    try:
+        server.run(sockets=[sock])
+    except KeyboardInterrupt:
+        # Uvicorn re-raises the interrupt after completing graceful shutdown.
+        pass
+    finally:
+        sock.close()
 
 
 if __name__ == "__main__":

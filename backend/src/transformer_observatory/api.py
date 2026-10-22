@@ -19,6 +19,7 @@ from .analysis import compare
 from .folders import open_folder
 from .jobs import Jobs
 from .lenses import register_lens
+from .model_discovery import ModelDiscovery, browse_folders, inspect_model, local_path, path_key, search_roots
 from .models import register_model
 from .research import Research, report_csv
 from .runtime import InstanceLock
@@ -28,6 +29,7 @@ from .schema import (
     ComparisonRequest,
     LensRegistration,
     ModelRegistration,
+    ModelSearchSettings,
     SettingsUpdate,
     StudyRequest,
     TraceMetadataUpdate,
@@ -50,6 +52,7 @@ def create_app(store=None, testing=False):
             guard.close()
         raise
     session = secrets.token_urlsafe(32)
+    discovery = ModelDiscovery()
 
     @asynccontextmanager
     async def lifespan(app):
@@ -63,12 +66,14 @@ def create_app(store=None, testing=False):
             yield
         finally:
             task.cancel()
+            discovery.close()
             jobs.close()
             if guard:
                 guard.close()
 
     app = FastAPI(title="Transformer Observatory", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.store, app.state.jobs = store, jobs
+    app.state.discovery = discovery
     app.state.research = research
 
     @app.middleware("http")
@@ -131,9 +136,52 @@ def create_app(store=None, testing=False):
 
     @app.get("/api/models/discover-local")
     def discover_local():
-        repo = Path(__file__).resolve().parents[3]
-        candidate = repo / ".tools/models/Qwen3-0.6B"
-        return dict(paths=[str(candidate)] if candidate.is_dir() else [])
+        return dict(
+            roots=search_roots(store),
+            custom_paths=(store.get("settings", "model_search") or {}).get("paths", []),
+            backend_os="WSL" if os.environ.get("WSL_DISTRO_NAME") else "Windows" if os.name == "nt" else "Linux",
+        )
+
+    @app.put("/api/models/search-paths")
+    def model_search_paths(body: ModelSearchSettings):
+        paths = {path_key(local_path(path)): str(local_path(path)) for path in body.paths}
+        store.put("settings", "model_search", dict(paths=list(paths.values())))
+        return discover_local()
+
+    @app.post("/api/models/discovery")
+    def start_discovery():
+        return discovery.start(search_roots(store))
+
+    @app.get("/api/models/discovery/{scan_id}")
+    def discovery_status(scan_id: str):
+        return discovery.get(scan_id)
+
+    @app.post("/api/models/discovery/{scan_id}/cancel")
+    def cancel_discovery(scan_id: str):
+        return discovery.cancel(scan_id)
+
+    @app.post("/api/models/inspect")
+    def inspect_local_model(body: ModelRegistration):
+        return inspect_model(body.path)
+
+    @app.get("/api/models/folders")
+    def model_folders(path: str = Query(default="", max_length=4096)):
+        return browse_folders(path, store)
+
+    @app.post("/api/models/{model_id}/relocate")
+    def relocate_model(model_id: str, body: ModelRegistration):
+        previous = store.get("models", model_id)
+        if not previous:
+            raise ValueError("登録したモデルが見つかりません")
+        model = register_model(body.path, body.name or previous["name"])
+        if model["fingerprint"] != previous["fingerprint"]:
+            raise ValueError("別の重み・Tokenizerです。新しいモデルとして登録してください")
+        other = store.get("models", model["id"])
+        if other and other["id"] != model_id:
+            raise ValueError("この保存場所は既に登録済みです。登録済みモデルを選択してください")
+        previous.update(path=model["path"], name=model["name"])
+        store.put("models", model_id, previous)
+        return previous
 
     @app.post("/api/analysis/preflight")
     def preflight(body: AnalysisRequest):

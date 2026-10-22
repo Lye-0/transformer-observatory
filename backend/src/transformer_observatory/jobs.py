@@ -14,6 +14,7 @@ import transformers
 
 from .analysis import project_trace
 from .capture import Cancelled, Capture
+from .model_discovery import inspect_model
 from .models import TINY_ID, capabilities, load_model, load_tokenizer, tiny_registration, tokenize
 from .runtime import configure_runtime
 from .schema import TERMINAL, AnalysisRequest
@@ -29,7 +30,12 @@ class Jobs:
         self.closed = False
 
     def models(self):
-        return [self.current_capabilities(m) for m in [tiny_registration(), *self.store.list("models")]]
+        models = [self.current_capabilities(m) for m in [tiny_registration(), *self.store.list("models")]]
+        for model in models:
+            inspection = inspect_model(model["path"]) if model.get("path") else None
+            model["available"] = inspection is None or inspection["status"] == "available"
+            model["availability_reason"] = inspection["reason"] if inspection else "内蔵の数値検証モデル"
+        return models
 
     def current_capabilities(self, model):
         current = capabilities(model["architecture"])
@@ -45,6 +51,9 @@ class Jobs:
         registration = self.store.get("models", model_id)
         if not registration:
             raise ValueError("モデルが登録されていません")
+        inspection = inspect_model(registration["path"])
+        if inspection["status"] != "available":
+            raise ValueError(f"Model Managerで保存場所を再指定してください: {inspection['reason']}")
         return self.current_capabilities(registration)
 
     def preflight(self, request):

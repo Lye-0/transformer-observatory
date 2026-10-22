@@ -1,0 +1,356 @@
+.pin-toggle {
+  white-space: nowrap;
+}
+.pin-toggle > span {
+  border-radius: 4px;
+  padding: 1px 6px;
+  background: #282338;
+  font:
+    12px Consolas,
+    monospace;
+}
+.pin-toggle.active {
+  border-color: #b3a4f6;
+}
+.floating-panel {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  background: #10141e;
+  border: 1px solid #58506d;
+  border-radius: 10px;
+  box-shadow: 0 16px 48px #0009;
+  overflow: hidden;
+  color: #c4cce0;
+}
+.floating-panel-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: #1a1c2a;
+  border-bottom: 1px solid #363447;
+}
+.floating-panel-handle {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  color: #ded7ef;
+  background: none;
+  border: 0;
+  padding: 8px;
+  cursor: grab;
+  touch-action: none;
+  text-align: left;
+  font-size: 13px;
+}
+.floating-panel-handle:active {
+  cursor: grabbing;
+}
+.floating-panel-handle > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.floating-panel-handle svg {
+  flex: none;
+  color: #8f85aa;
+}
+.floating-panel-body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 15px 16px 26px;
+  overscroll-behavior: contain;
+}
+.floating-panel-body > .subtle-note:first-child {
+  margin-top: 0;
+}
+.floating-panel-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 24px;
+  background: #1a1c2a;
+  color: #b5a8d3;
+  border: 0;
+  border-radius: 6px 0 0;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.pin-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 16px;
+  text-align: center;
+  color: #9da8c0;
+  gap: 16px;
+}
+.pin-empty b {
+  font-size: 14px;
+  color: #c8c1dd;
+}
+.pin-empty p {
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 0;
+}
+.pinned-value {
+  padding: 12px;
+  margin: 14px 0;
+  border: 1px solid #363548;
+  border-radius: 7px;
+  background: #0c1018;
+}
+.pinned-value > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.pinned-value > header b {
+  flex: 1;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.8;
+}
+.pinned-value > header button {
+  flex: none;
+}
+.pinned-metrics {
+  margin: 0;
+}
+.pinned-metrics > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 15px;
+  padding: 8px 0;
+  border-bottom: 1px solid #262a38;
+}
+.pinned-metrics dt {
+  color: #9faac2;
+  font-size: 12px;
+}
+.pinned-metrics dd {
+  margin: 0;
+  color: #d3c8ec;
+  font:
+    13px Consolas,
+    monospace;
+}
+.heatmap-view {
+  margin: 12px 0;
+  min-width: 0;
+}
+.heatmap-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: #a0acc6;
+}
+.heatmap-toolbar .text-button {
+  font-size: 12px;
+  padding: 5px 0;
+}
+.heatmap-preview {
+  display: flex;
+  justify-content: center;
+  background: #0b0f17;
+  border: 1px solid #272c3c;
+  border-radius: 4px;
+  padding: 8px 0;
+  overflow: hidden;
+}
+.tensor-heatmap-canvas {
+  display: block;
+  flex: none;
+  cursor: crosshair;
+  touch-action: pan-x pan-y;
+}
+.heatmap-viewport .tensor-heatmap-canvas {
+  margin-inline: auto;
+}
+.heatmap-legend {
+  max-width: 100%;
+  margin: 10px 0;
+}
+.heatmap-legend > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #aeb9cf;
+  font:
+    11px Consolas,
+    monospace;
+}
+.heatmap-legend > i {
+  display: block;
+  height: 5px;
+  margin: 5px 0;
+  background: linear-gradient(to right, rgb(111, 179, 255), rgb(31, 39, 54) 50%, rgb(255, 140, 121));
+  border-radius: 3px;
+}
+.heatmap-legend small {
+  font-size: 11px;
+  color: #919db8;
+}
+.heatmap-selection {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  padding: 9px 10px;
+  border: 1px solid #303447;
+  background: #151926;
+  border-radius: 4px;
+  font:
+    12px Consolas,
+    monospace;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.heatmap-selection > span {
+  color: #a5b0c8;
+}
+.heatmap-selection > strong {
+  color: #f0e4ff;
+  font-weight: 500;
+  user-select: text;
+}
+.heatmap-tooltip {
+  position: fixed;
+  z-index: 90;
+  pointer-events: none;
+  width: 270px;
+  padding: 10px 12px;
+  border: 1px solid #7a6b99;
+  border-radius: 5px;
+  background: #171925fa;
+  box-shadow: 0 6px 20px #0008;
+  font:
+    12px Consolas,
+    monospace;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow-wrap: anywhere;
+}
+.heatmap-tooltip small {
+  color: #a6afc6;
+  line-height: 1.5;
+}
+.heatmap-tooltip b {
+  font-weight: 400;
+  color: #d5c6f2;
+}
+.heatmap-tooltip strong {
+  font-weight: 500;
+  color: #fff;
+}
+.heatmap-context {
+  font-size: 12px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  margin: 0 0 12px;
+  color: #d1c4eb;
+}
+.heatmap-context > span {
+  color: #8f9cb8;
+}
+.heatmap-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.heatmap-detail-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.heatmap-detail-tools .text-button {
+  padding: 7px;
+  font-size: 12px;
+}
+.heatmap-detail-tools .text-button.active {
+  color: #e3d0ff;
+  background: #302840;
+  border-radius: 4px;
+}
+.heatmap-detail-tools .mono {
+  font-size: 12px;
+  min-width: 42px;
+  text-align: center;
+}
+.heatmap-detail-tools form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.heatmap-detail-tools label {
+  color: #a6b0c7;
+  font-size: 12px;
+}
+.heatmap-detail-tools input {
+  width: 84px;
+  min-width: 0;
+  border: 1px solid #3d4258;
+  border-radius: 4px;
+  background: #0c1019;
+  color: #ded6ed;
+  padding: 7px;
+  font:
+    12px Consolas,
+    monospace;
+}
+.heatmap-viewport {
+  flex: 1;
+  min-height: 100px;
+  overflow: auto;
+  border: 1px solid #33384d;
+  background: #0b0f17;
+  overscroll-behavior: contain;
+  margin-bottom: 10px;
+}
+.heatmap-viewport[data-pan='true'],
+.heatmap-viewport[data-pan='true'] canvas {
+  cursor: grab;
+  touch-action: none;
+}
+.heatmap-detail > .subtle-note {
+  margin-bottom: 0;
+  font-size: 11px;
+  line-height: 1.7;
+}
+@media (max-width: 760px) {
+  .explorer-tools {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .pin-toggle {
+    padding: 7px 9px;
+    min-height: 34px;
+    font-size: 12px;
+  }
+  .floating-panel-body {
+    padding: 10px 10px 25px;
+  }
+}

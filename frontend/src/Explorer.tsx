@@ -16,7 +16,20 @@ import {
   X,
 } from 'lucide-react';
 import { api, coordinates, number, type Manifest } from './api';
+import Select from './Select';
 import TrajectoryScene, { tokenColor } from './TrajectoryScene';
+import FloatingPanel from './FloatingPanel';
+import Heatmap, { HeatmapDetail } from './Heatmap';
+import { colorLimit, type TensorValue } from './heatmapMath';
+
+type PinnedValue = {
+  id: string;
+  context: string;
+  space: string;
+  tensor?: TensorValue;
+  values?: (number | null)[];
+};
+type ExpandedValue = { id: string; context: string; tensor: TensorValue; pinId?: string };
 
 type Props = {
   id: string;
@@ -54,8 +67,14 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('Overview');
   const [tokenMetrics, setTokenMetrics] = useState<any>(null);
-  const [tensors, setTensors] = useState<any[]>([]);
-  const [pins, setPins] = useState<any[]>([]);
+  const [tensorResult, setTensorResult] = useState<{ key: string; tensors: any[]; error?: boolean } | null>(
+    null,
+  );
+  const [pins, setPins] = useState<PinnedValue[]>([]);
+  const [pinsOpen, setPinsOpen] = useState(false);
+  const [expanded, setExpanded] = useState<ExpandedValue | null>(null);
+  const visualization = useRef<HTMLElement>(null);
+  const pinButton = useRef<HTMLButtonElement>(null);
   const [traces, setTraces] = useState<any[]>([]);
   const [compareId, setCompareId] = useState('');
   const [comparison, setComparison] = useState<any>(null);
@@ -71,6 +90,8 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
     setComparison(null);
     setData(null);
     setPins([]);
+    setPinsOpen(false);
+    setExpanded(null);
     setSelected([0]);
     setVerified(null);
     setMetrics(undefined);
@@ -110,7 +131,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
     let active = true;
     api(`traces/${id}/metrics?token=${selected[0] ?? 0}`)
       .then((result) => {
-        if (active) setTokenMetrics(result);
+        if (active) setTokenMetrics({ trace: id, token: selected[0] ?? 0, data: result });
       })
       .catch((e) => onError(String(e)));
     return () => {
@@ -120,19 +141,24 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
   const token = m?.tokens[selected[0] ?? 0];
   const layer = stage === 0 ? 0 : Math.floor((stage - 1) / 2);
   const substage = m?.stages[stage] || 'embedding';
+  const tensorQuery =
+    tab === 'Overview' || tab === 'Tensor' ? `kind=residual&stage=${substage}` : `kind=tensor&layer=${layer}`;
+  const tensorKey = `${id}:${token?.position}:${token?.step}:${tensorQuery}`;
+  const tensors = tensorResult?.key === tensorKey ? tensorResult.tensors : [];
   useEffect(() => {
     if (!m || !token) return;
     let active = true;
-    setTensors([]);
-    const q =
-      tab === 'Overview' || tab === 'Tensor'
-        ? `kind=residual&stage=${substage}`
-        : `kind=tensor&layer=${layer}`;
-    api(`traces/${id}/tensor?${q}&token=${token.position}&step=${token.step}`)
+    setTensorResult(null);
+    api(`traces/${id}/tensor?${tensorQuery}&token=${token.position}&step=${token.step}`)
       .then((result) => {
-        if (active) setTensors(result.tensors);
+        if (active) setTensorResult({ key: tensorKey, tensors: result.tensors });
       })
-      .catch((e) => onError(String(e)));
+      .catch((e) => {
+        if (active) {
+          setTensorResult({ key: tensorKey, tensors: [], error: true });
+          onError(String(e));
+        }
+      });
     return () => {
       active = false;
     };
@@ -162,7 +188,26 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
       ),
     [comparison, substage],
   );
-  const currentMetrics = tokenMetrics?.values[stage];
+  const currentMetrics =
+    tokenMetrics?.trace === id && tokenMetrics.token === (selected[0] ?? 0)
+      ? tokenMetrics.data.values[stage]
+      : undefined;
+  const pinScale = colorLimit(pins.flatMap((p) => (p.tensor ? [p.tensor.values] : [])));
+  const tensorPinCount = pins.filter((p) => p.tensor).length;
+  const context = `${token?.text || token?.raw || ''} · #${token?.position ?? 0} · ${stageLabel(substage)} · ${token?.step ? `Decode ${token.step}` : 'Prefill'}`;
+  const measurementId = `${id}:${token?.position}:${token?.step}:${substage}`;
+  const metricPinId = `${measurementId}:metrics`;
+  function addPin(value: PinnedValue) {
+    setPins((old) => (old.some((item) => item.id === value.id) ? old : [...old, value]));
+  }
+  function expandTensor(tensor: TensorValue, label: string, valueId: string, pinId?: string) {
+    setExpanded({
+      id: valueId,
+      context: label,
+      tensor: { ...tensor, shape: [...tensor.shape], values: [...tensor.values] },
+      pinId,
+    });
+  }
   function select(index: number, multi = false) {
     setSelected((old) =>
       multi ? (old.includes(index) ? old.filter((i) => i !== index) : [...old, index]) : [index],
@@ -230,6 +275,17 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
             </button>
           </div>
           <button
+            className={`button secondary pin-toggle ${pinsOpen ? 'active' : ''}`}
+            ref={pinButton}
+            aria-haspopup="dialog"
+            aria-expanded={pinsOpen}
+            aria-controls="pinned-values-panel"
+            onClick={() => setPinsOpen(!pinsOpen)}
+          >
+            <Pin size={15} />
+            ピン <span aria-live="polite">{pins.length}</span>
+          </button>
+          <button
             className="icon-button"
             title={full ? 'パネルを表示' : '3Dを広く表示'}
             onClick={() => setFull(!full)}
@@ -280,7 +336,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
             選択していない軌跡も維持します。
           </div>
         </aside>
-        <section className="visualization">
+        <section className="visualization" ref={visualization}>
           <div className="view-explanation">
             <b>{view === 'displacement' ? 'Δx = x(s) − x(0)' : 'P · (x − μ)'}</b>
             <span>
@@ -371,19 +427,18 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                 </p>
                 <button
                   className="secondary compact"
+                  disabled={!currentMetrics || pins.some((p) => p.id === metricPinId)}
                   onClick={() =>
-                    setPins((old) => [
-                      ...old.slice(-1),
-                      {
-                        label: `${token?.raw} · ${stageLabel(substage)}`,
-                        values: [...(currentMetrics || [])],
-                        space: 'residual',
-                      },
-                    ])
+                    addPin({
+                      id: metricPinId,
+                      context,
+                      values: metricLabels.map((_, i) => currentMetrics?.[i] ?? null),
+                      space: 'residual',
+                    })
                   }
                 >
                   <Pin size={14} />
-                  指標をPin
+                  {pins.some((p) => p.id === metricPinId) ? '指標はピン済み' : '指標をPin'}
                 </button>
               </>
             )}
@@ -436,7 +491,14 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                         <span>mean {number(t.mean)}</span>
                         <span>std {number(t.std)}</span>
                       </div>
-                      <Heatmap values={t.values} />
+                      <Heatmap
+                        key={`${measurementId}:${t.name}`}
+                        tensor={t}
+                        context={`${context} · ${t.name}`}
+                        onExpand={() =>
+                          expandTensor(t, `${context} · ${t.name}`, `${measurementId}:${t.name}`)
+                        }
+                      />
                       {t.name === 'attention_weights' && <HeadConnections tensor={t} tokens={m.tokens} />}
                       <p className="subtle-note">
                         {t.dimensions} 成分
@@ -444,15 +506,20 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                       </p>
                       <button
                         className="text-button"
+                        disabled={pins.some((p) => p.id === `${measurementId}:${t.name}`)}
                         onClick={() =>
-                          setPins((old) => [
-                            ...old.slice(-1),
-                            { label: `${token?.raw} · ${substage} · ${t.name}`, tensor: t, space: t.space },
-                          ])
+                          addPin({
+                            id: `${measurementId}:${t.name}`,
+                            context: `${context} · ${t.name}`,
+                            tensor: { ...t, shape: [...t.shape], values: [...t.values] },
+                            space: t.space,
+                          })
                         }
                       >
                         <Pin size={13} />
-                        この値をPin
+                        {pins.some((p) => p.id === `${measurementId}:${t.name}`)
+                          ? 'この値はピン済み'
+                          : 'この値をPin'}
                       </button>
                       <details>
                         <summary>成分を数値で表示</summary>
@@ -462,6 +529,14 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                       </details>
                     </details>
                   ))
+                ) : tensorResult?.key !== tensorKey ? (
+                  <p className="subtle-note" role="status">
+                    観測値を読み込み中…
+                  </p>
+                ) : tensorResult.error ? (
+                  <p className="warning" role="alert">
+                    観測値を読み込めませんでした。
+                  </p>
                 ) : (
                   <div className="not-captured">
                     <DatabaseIcon />
@@ -488,35 +563,95 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                 )}
               </>
             )}
-            {pins.length > 0 && (
-              <section className="pins">
-                <div className="panel-label">
-                  PIN比較
-                  <button className="icon-button" title="Pinを解除" onClick={() => setPins([])}>
-                    <X size={14} />
-                  </button>
-                </div>
-                {pins.map((p, i) => (
-                  <div key={i}>
-                    <b>{p.label}</b>
-                    <span className="space-label">{p.space}</span>
-                    {p.tensor ? (
-                      <Heatmap values={p.tensor.values} />
-                    ) : (
-                      <small>{p.values.map(number).join(' · ')}</small>
-                    )}
-                  </div>
-                ))}
-                {pins.length === 2 && (
-                  <p className="subtle-note">
-                    同じ空間名でも、層ごとのQ/Kなどの意味的対応は自動的に保証されません。
-                  </p>
-                )}
-              </section>
-            )}
           </div>
         </aside>
       </div>
+      {pinsOpen && (
+        <FloatingPanel
+          id="pinned-values-panel"
+          title="ピン比較"
+          anchor={visualization}
+          fallbackFocus={pinButton}
+          onClose={() => setPinsOpen(false)}
+        >
+          <p className="subtle-note">ピンした時点の観測値です。タブや観測点を切り替えながら確認できます。</p>
+          {!pins.length && (
+            <div className="pin-empty">
+              <Pin size={24} />
+              <b>ピンした値はここに表示されます</b>
+              <p>Inspectorの「指標をPin」「この値をPin」で追加できます。</p>
+            </div>
+          )}
+          {pins.map((p) => (
+            <article className="pinned-value" key={p.id}>
+              <header>
+                <b>{p.context}</b>
+                <button
+                  className="icon-button"
+                  aria-label={`${p.context}のピンを解除`}
+                  title="このピンを解除"
+                  onClick={() => setPins((old) => old.filter((item) => item.id !== p.id))}
+                >
+                  <X size={15} />
+                </button>
+              </header>
+              <span className="space-label">
+                {p.space}
+                {p.tensor && ` · 形状 [${p.tensor.shape.join(' × ')}]`}
+              </span>
+              {p.tensor ? (
+                <>
+                  <Heatmap
+                    tensor={p.tensor}
+                    context={p.context}
+                    scale={tensorPinCount > 1 ? pinScale : undefined}
+                    onExpand={() => expandTensor(p.tensor!, p.context, p.id, p.id)}
+                  />
+                  <p className="subtle-note">
+                    {p.tensor.dimensions.toLocaleString()}成分
+                    {p.tensor.truncated && ` · 表示は先頭${p.tensor.values.length.toLocaleString()}成分`}
+                  </p>
+                </>
+              ) : (
+                <dl className="pinned-metrics">
+                  {p.values?.map((value, i) => (
+                    <div key={metricLabels[i]}>
+                      <dt>{metricLabels[i]}</dt>
+                      <dd>{number(value)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </article>
+          ))}
+          {tensorPinCount > 1 && (
+            <p className="subtle-note">
+              色範囲はピンしたテンソルの表示値から共通で計算します。同じ空間名でも、層ごとのQ/Kなどの意味的対応は自動的に保証されません。空間・形状も確認してください。
+            </p>
+          )}
+        </FloatingPanel>
+      )}
+      {expanded && (
+        <FloatingPanel
+          title="成分を詳しく見る"
+          anchor={visualization}
+          fallbackFocus={pinButton}
+          width={620}
+          height={680}
+          onClose={() => setExpanded(null)}
+        >
+          <HeatmapDetail
+            key={expanded.id}
+            tensor={expanded.tensor}
+            context={expanded.context}
+            scale={
+              expanded.pinId && pins.some((p) => p.id === expanded.pinId) && tensorPinCount > 1
+                ? pinScale
+                : undefined
+            }
+          />
+        </FloatingPanel>
+      )}
       <div className="timeline">
         <button
           className="icon-button"
@@ -556,7 +691,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
             {stage + 1} / {m.stages.length} 観測点
           </small>
         </span>
-        <select
+        <Select
           aria-label="生成ステップ"
           value={token?.step || 0}
           onChange={(e) => {
@@ -572,13 +707,13 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                 Decode {t.step}
               </option>
             ))}
-        </select>
-        <select aria-label="再生速度" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+        </Select>
+        <Select aria-label="再生速度" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
           <option value={0.5}>0.5×</option>
           <option value={1}>1×</option>
           <option value={2}>2×</option>
           <option value={4}>4×</option>
-        </select>
+        </Select>
       </div>
       <div className="explorer-footer">
         <span>
@@ -612,7 +747,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
         </summary>
         <div className="comparison-body">
           <div className="button-row">
-            <select
+            <Select
               aria-label="比較する実験"
               value={compareId}
               onChange={(e) => setCompareId(e.target.value)}
@@ -625,13 +760,13 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                     {t.title}
                   </option>
                 ))}
-            </select>
+            </Select>
             <button className="secondary" disabled={!compareId || comparing} onClick={compare}>
               {comparing ? '共通PCAを計算中…' : '比較する'}
             </button>
             {comparison && (
               <>
-                <select
+                <Select
                   aria-label="比較表示"
                   value={compareMode}
                   onChange={(e) => setCompareMode(e.target.value)}
@@ -639,7 +774,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                   <option value="overlay">Overlay</option>
                   <option value="side">Side by Side</option>
                   <option value="difference">Difference Analysis</option>
-                </select>
+                </Select>
                 <button className="text-button" onClick={() => setComparison(null)}>
                   比較を閉じる
                 </button>
@@ -743,7 +878,7 @@ function HeadConnections({ tensor, tokens }: { tensor: any; tokens: Manifest['to
     <div className="attention-connections">
       <label className="field">
         接続を調べるQuery Head
-        <select
+        <Select
           aria-label="接続を調べるQuery Head"
           value={safeHead}
           onChange={(e) => setHead(Number(e.target.value))}
@@ -753,7 +888,7 @@ function HeadConnections({ tensor, tokens }: { tensor: any; tokens: Manifest['to
               Head {tensor.heads?.[i] ?? i}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <p className="subtle-note">
         選択Query位置から各Key位置への係数。上位16接続を表に表示します。行列の全値は成分表示で確認できます。
@@ -772,35 +907,6 @@ function HeadConnections({ tensor, tokens }: { tensor: any; tokens: Manifest['to
         </p>
       )}
     </div>
-  );
-}
-
-function Heatmap({ values }: { values: number[] }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = ref.current!,
-      ctx = canvas.getContext('2d');
-    if (!ctx || !values.length) return;
-    const cols = Math.min(64, values.length),
-      rows = Math.ceil(values.length / cols);
-    canvas.width = cols * 4;
-    canvas.height = rows * 4;
-    const max = Math.max(...values.map(Math.abs), 0.00001);
-    values.forEach((x, i) => {
-      const v = Math.abs(x) / max;
-      ctx.fillStyle =
-        x < 0
-          ? `rgb(${40 + v * 90},${55 + v * 95},${80 + v * 170})`
-          : `rgb(${70 + v * 180},${50 + v * 90},${55 + v * 110})`;
-      ctx.fillRect((i % cols) * 4, Math.floor(i / cols) * 4, 3.5, 3.5);
-    });
-  }, [values]);
-  return (
-    <canvas
-      ref={ref}
-      className="heatmap"
-      aria-label="高次元成分ヒートマップ。青が負、赤が正。数値は下の成分表示で確認できます。"
-    />
   );
 }
 
@@ -853,14 +959,14 @@ function Prediction({
       </p>
       <label className="field">
         読み出し方式
-        <select aria-label="読み出し方式" value={lensId} onChange={(e) => setLensId(e.target.value)}>
+        <Select aria-label="読み出し方式" value={lensId} onChange={(e) => setLensId(e.target.value)}>
           <option value="">Logit Lens</option>
           {lenses.map((l) => (
             <option key={l.id} value={l.id}>
               Tuned Lens · {l.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       {lensId && (
         <p className="subtle-note">

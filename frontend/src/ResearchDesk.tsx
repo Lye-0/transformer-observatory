@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Activity, Download, Loader2 } from 'lucide-react';
 import { api, number, type Manifest, type Model } from './api';
+import Select from './Select';
 import TrajectoryScene from './TrajectoryScene';
 
 type Props = { models: Model[]; onError: (message: string) => void };
@@ -180,14 +181,14 @@ export default function ResearchDesk({ models, onError }: Props) {
   const selector = (value: string, change: (id: string) => void, label: string, fingerprint?: string) => (
     <label className="field grow">
       {label}
-      <select aria-label={label} value={value} onChange={(e) => change(e.target.value)}>
+      <Select aria-label={label} value={value} onChange={(e) => change(e.target.value)}>
         <option value="">実験を選択</option>
         {traces.map((t) => (
           <option key={t.id} value={t.id} disabled={!!fingerprint && t.model_fingerprint !== fingerprint}>
             {t.title} · Level {t.level}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
   const inputTokens = manifest?.tokens.filter((t) => !t.generated) || [];
@@ -223,11 +224,11 @@ export default function ResearchDesk({ models, onError }: Props) {
               {selector(target, setTarget, '介入先の実験')}
               <label className="field">
                 介入方式
-                <select aria-label="介入方式" value={mode} onChange={(e) => setMode(e.target.value)}>
+                <Select aria-label="介入方式" value={mode} onChange={(e) => setMode(e.target.value)}>
                   <option value="residual_patch">Residual Patch</option>
                   <option value="head_ablation">Head Ablation</option>
                   <option value="mlp_ablation">MLP Ablation</option>
-                </select>
+                </Select>
               </label>
             </div>
             {mode === 'residual_patch' ? (
@@ -236,7 +237,7 @@ export default function ResearchDesk({ models, onError }: Props) {
                   {selector(source, setSource, 'Patch取得元の実験', manifest?.model.fingerprint)}
                   <label className="field">
                     Patchする観測点
-                    <select
+                    <Select
                       aria-label="Patchする観測点"
                       value={stage}
                       onChange={(e) => setStage(e.target.value)}
@@ -248,7 +249,7 @@ export default function ResearchDesk({ models, onError }: Props) {
                             {s}
                           </option>
                         ))}
-                    </select>
+                    </Select>
                   </label>
                 </div>
                 <label className="field">
@@ -425,7 +426,7 @@ export default function ResearchDesk({ models, onError }: Props) {
             </p>
             <label className="field">
               Lensの対象モデル
-              <select
+              <Select
                 aria-label="Lensの対象モデル"
                 value={lensModel}
                 onChange={(e) => setLensModel(e.target.value)}
@@ -435,7 +436,7 @@ export default function ResearchDesk({ models, onError }: Props) {
                     {m.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               学習済みLensフォルダー
@@ -481,14 +482,14 @@ export default function ResearchDesk({ models, onError }: Props) {
       <section className="panel research-results">
         <div className="panel-heading">
           <span>研究レポート</span>
-          <select aria-label="研究レポート" value={studyId} onChange={(e) => setStudyId(e.target.value)}>
+          <Select aria-label="研究レポート" value={studyId} onChange={(e) => setStudyId(e.target.value)}>
             <option value="">レポートを選択</option>
             {history.map((s) => (
               <option key={s.id} value={s.id}>
                 {labels[s.kind]} · {new Date(s.created_at * 1000).toLocaleString('ja-JP')} · {s.state}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         {study && (
           <>
@@ -721,17 +722,17 @@ function NonlinearScene({ result }: { result: any }) {
       />
       <label className="field">
         t-SNE上の観測点
-        <select aria-label="t-SNE上の観測点" value={stage} onChange={(e) => setStage(Number(e.target.value))}>
+        <Select aria-label="t-SNE上の観測点" value={stage} onChange={(e) => setStage(Number(e.target.value))}>
           {result.stages.map((s: string, i: number) => (
             <option key={s} value={i}>
               {s}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         非線形表示のトークン
-        <select
+        <Select
           aria-label="非線形表示のトークン"
           value={selected[0] ?? 0}
           onChange={(e) => setSelected([Number(e.target.value)])}
@@ -741,7 +742,7 @@ function NonlinearScene({ result }: { result: any }) {
               #{t.position} {t.raw} / ID {t.id}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="check-field">
         <input type="checkbox" checked={lowPower} onChange={(e) => setLowPower(e.target.checked)} />

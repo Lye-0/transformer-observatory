@@ -62,6 +62,16 @@ class ModelRegistration(BaseModel):
     name: str = Field(default="", max_length=160)
 
 
+class ModelSearchSettings(BaseModel):
+    paths: list[str] = Field(default_factory=list, max_length=16)
+
+    @model_validator(mode="after")
+    def path_lengths(self):
+        if any(not path.strip() or len(path) > 4096 for path in self.paths):
+            raise ValueError("探索先は1〜4096文字の絶対パスを指定してください")
+        return self
+
+
 class TraceMetadataUpdate(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     description: str = Field(default="", max_length=4000)

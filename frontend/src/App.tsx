@@ -25,12 +25,26 @@ export default function App() {
   const [nav, setNav] = useState('analysis');
   const [ready, setReady] = useState(false);
   const [models, setModels] = useState<Model[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState('');
   const [error, setError] = useState('');
   const [job, setJob] = useState<Job | null>(null);
   const [traceId, setTraceId] = useState('');
   const [draft, setDraft] = useState<Record<string, any>>();
   const reload = useCallback(async () => {
-    setModels(await api<Model[]>('models'));
+    const next = await api<Model[]>('models');
+    setModels(next);
+    setSelectedModelId((previous) => {
+      const saved = previous || localStorage.getItem('observatory-selected-model');
+      return (
+        next.find((m) => m.id === saved)?.id ||
+        next.find((m) => m.trained && m.available !== false)?.id ||
+        'tiny-transformer'
+      );
+    });
+  }, []);
+  const chooseModel = useCallback((id: string) => {
+    setSelectedModelId(id);
+    localStorage.setItem('observatory-selected-model', id);
   }, []);
   useEffect(() => {
     let active = true;
@@ -186,6 +200,9 @@ export default function App() {
             <div hidden={nav !== 'analysis'}>
               <NewAnalysis
                 models={models}
+                modelId={selectedModelId}
+                onModelChange={chooseModel}
+                onAddModel={() => setNav('models')}
                 onJob={(j) => {
                   setJob(j);
                   setNav('progress');
@@ -194,7 +211,19 @@ export default function App() {
                 initialRequest={draft}
               />
             </div>
-            {nav === 'models' && <ModelManager models={models} reload={reload} onError={setError} />}
+            {nav === 'models' && (
+              <ModelManager
+                models={models}
+                reload={reload}
+                onError={setError}
+                onReturn={() => setNav('analysis')}
+                onRegistered={async (model) => {
+                  await reload();
+                  chooseModel(model.id);
+                  setNav('analysis');
+                }}
+              />
+            )}
             {nav === 'library' && <Library onOpen={open} onError={setError} />}
             {nav === 'research' && <ResearchDesk models={models} onError={setError} />}
             {nav === 'settings' && <Settings onError={setError} />}
