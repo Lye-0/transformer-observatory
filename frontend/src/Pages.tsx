@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { api, bytes, upload, type Job, type Model } from './api';
 import Select from './Select';
+import { NumberField } from './NumberInput';
 
 type Common = { onError: (message: string) => void };
 
@@ -249,16 +250,14 @@ export function NewAnalysis({
               続きを生成する
             </label>
             {generate && (
-              <label className="field inline-field">
-                最大生成数
-                <input
-                  type="number"
-                  min={1}
-                  max={256}
-                  value={maxNew}
-                  onChange={(e) => setMaxNew(Number(e.target.value))}
-                />
-              </label>
+              <NumberField
+                label="最大生成数"
+                className="field inline-field"
+                min={1}
+                max={256}
+                value={maxNew}
+                onValueChange={(value) => setMaxNew(Number(value))}
+              />
             )}
           </div>
           <details className="advanced">
@@ -321,15 +320,12 @@ export function NewAnalysis({
                 </>
               )}
               <div className="field-row">
-                <label className="field">
-                  Seed
-                  <input
-                    type="number"
-                    min={0}
-                    value={seed}
-                    onChange={(e) => setSeed(Number(e.target.value))}
-                  />
-                </label>
+                <NumberField
+                  label="Seed"
+                  min={0}
+                  value={seed}
+                  onValueChange={(value) => setSeed(Number(value))}
+                />
                 <label className="field">
                   PCA
                   <Select
@@ -345,28 +341,22 @@ export function NewAnalysis({
               </div>
               {generate && (
                 <div className="field-row">
-                  <label className="field">
-                    Temperature（0でGreedy）
-                    <input
-                      type="number"
-                      min={0}
-                      max={2}
-                      step="0.1"
-                      value={temperature}
-                      onChange={(e) => setTemperature(Number(e.target.value))}
-                    />
-                  </label>
-                  <label className="field">
-                    Top-p
-                    <input
-                      type="number"
-                      min="0.01"
-                      max={1}
-                      step="0.05"
-                      value={topP}
-                      onChange={(e) => setTopP(Number(e.target.value))}
-                    />
-                  </label>
+                  <NumberField
+                    label="Temperature（0でGreedy）"
+                    min={0}
+                    max={2}
+                    step="0.1"
+                    value={temperature}
+                    onValueChange={(value) => setTemperature(Number(value))}
+                  />
+                  <NumberField
+                    label="Top-p"
+                    min="0.01"
+                    max={1}
+                    step="0.05"
+                    value={topP}
+                    onValueChange={(value) => setTopP(Number(value))}
+                  />
                 </div>
               )}
             </div>
@@ -866,47 +856,35 @@ export function Settings({ onError }: Common) {
           <span className="tag">{settings.backend_os}</span>
         </div>
         <div className="field-row">
-          <label className="field">
-            一時保持期間（日）
-            <input
-              type="number"
-              min={1}
-              max={3650}
-              value={settings.retention_days}
-              onChange={(e) => change('retention_days', e.target.value)}
-            />
-          </label>
-          <label className="field">
-            一時データ上限（GiB）
-            <input
-              type="number"
-              min="0.1"
-              step="0.1"
-              value={settings.cache_limit_gib}
-              onChange={(e) => change('cache_limit_gib', e.target.value)}
-            />
-          </label>
+          <NumberField
+            label="一時保持期間（日）"
+            min={1}
+            max={3650}
+            value={settings.retention_days}
+            onValueChange={(value) => change('retention_days', value)}
+          />
+          <NumberField
+            label="一時データ上限（GiB）"
+            min="0.1"
+            step="0.1"
+            value={settings.cache_limit_gib}
+            onValueChange={(value) => change('cache_limit_gib', value)}
+          />
         </div>
         <div className="field-row">
-          <label className="field">
-            1トレースの上限（GiB）
-            <input
-              type="number"
-              min="0.05"
-              step="0.05"
-              value={settings.trace_limit_gib}
-              onChange={(e) => change('trace_limit_gib', e.target.value)}
-            />
-          </label>
-          <label className="field">
-            PCA用RAM予算（MiB）
-            <input
-              type="number"
-              min={64}
-              value={settings.ram_budget_mib}
-              onChange={(e) => change('ram_budget_mib', e.target.value)}
-            />
-          </label>
+          <NumberField
+            label="1トレースの上限（GiB）"
+            min="0.05"
+            step="0.05"
+            value={settings.trace_limit_gib}
+            onValueChange={(value) => change('trace_limit_gib', value)}
+          />
+          <NumberField
+            label="PCA用RAM予算（MiB）"
+            min={64}
+            value={settings.ram_budget_mib}
+            onValueChange={(value) => change('ram_budget_mib', value)}
+          />
         </div>
         <label className="field">
           新しいトレースの保存先（バックエンドOSの絶対パス）

@@ -308,14 +308,10 @@
   color: #a6b0c7;
   font-size: 12px;
 }
-.heatmap-detail-tools input {
-  width: 84px;
-  min-width: 0;
-  border: 1px solid #3d4258;
-  border-radius: 4px;
-  background: #0c1019;
-  color: #ded6ed;
-  padding: 7px;
+.heatmap-detail-tools .number-input {
+  width: 154px;
+}
+.heatmap-detail-tools .number-input input {
   font:
     12px Consolas,
     monospace;

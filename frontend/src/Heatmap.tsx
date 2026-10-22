@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Hand, Maximize2, Minus, Plus } from 'lucide-react';
+import NumberInput from './NumberInput';
 import {
   cellAt,
   colorLimit,
@@ -332,14 +333,14 @@ export function HeatmapDetail({ tensor, context, scale }: Props) {
           }}
         >
           <label htmlFor={inputId}>成分番号</label>
-          <input
+          <NumberInput
             id={inputId}
-            type="number"
+            aria-label="成分番号"
             min={0}
             max={tensor.values.length - 1}
             step={1}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onValueChange={setInput}
             required
           />
           <button className="text-button" type="submit">

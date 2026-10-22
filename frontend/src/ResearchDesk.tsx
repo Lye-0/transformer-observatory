@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Activity, Download, Loader2 } from 'lucide-react';
 import { api, number, type Manifest, type Model } from './api';
 import Select from './Select';
+import { NumberField } from './NumberInput';
 import TrajectoryScene from './TrajectoryScene';
 
 type Props = { models: Model[]; onError: (message: string) => void };
@@ -279,27 +280,21 @@ export default function ResearchDesk({ models, onError }: Props) {
               </>
             ) : (
               <div className="field-row">
-                <label className="field">
-                  介入Layer
-                  <input
-                    type="number"
-                    min={0}
-                    max={(manifest?.model.layers || 1) - 1}
-                    value={layer}
-                    onChange={(e) => setLayer(Number(e.target.value))}
-                  />
-                </label>
+                <NumberField
+                  label="介入Layer"
+                  min={0}
+                  max={(manifest?.model.layers || 1) - 1}
+                  value={layer}
+                  onValueChange={(value) => setLayer(Number(value))}
+                />
                 {mode === 'head_ablation' && (
-                  <label className="field">
-                    無効化するQuery Head
-                    <input
-                      type="number"
-                      min={0}
-                      max={(manifest?.model.heads || 1) - 1}
-                      value={head}
-                      onChange={(e) => setHead(Number(e.target.value))}
-                    />
-                  </label>
+                  <NumberField
+                    label="無効化するQuery Head"
+                    min={0}
+                    max={(manifest?.model.heads || 1) - 1}
+                    value={head}
+                    onValueChange={(value) => setHead(Number(value))}
+                  />
                 )}
               </div>
             )}
@@ -312,39 +307,30 @@ export default function ResearchDesk({ models, onError }: Props) {
                   placeholder="空欄＝入力の末尾"
                 />
               </label>
-              <label className="field">
-                介入の強さ
-                <input
-                  type="number"
-                  min={0}
-                  max={1}
-                  step={0.1}
-                  value={strength}
-                  onChange={(e) => setStrength(Number(e.target.value))}
-                />
-              </label>
+              <NumberField
+                label="介入の強さ"
+                min={0}
+                max={1}
+                step={0.1}
+                value={strength}
+                onValueChange={(value) => setStrength(Number(value))}
+              />
             </div>
             <div className="field-row">
-              <label className="field">
-                出力を読む位置
-                <input
-                  type="number"
-                  min={0}
-                  value={readout}
-                  onChange={(e) => setReadout(e.target.value)}
-                  placeholder="空欄＝入力の末尾"
-                />
-              </label>
-              <label className="field">
-                注目する出力Token ID（任意）
-                <input
-                  type="number"
-                  min={0}
-                  value={tokenId}
-                  onChange={(e) => setTokenId(e.target.value)}
-                  placeholder="上位候補に加えて調べるID"
-                />
-              </label>
+              <NumberField
+                label="出力を読む位置"
+                min={0}
+                value={readout}
+                onValueChange={(value) => setReadout(value)}
+                placeholder="空欄＝入力の末尾"
+              />
+              <NumberField
+                label="注目する出力Token ID（任意）"
+                min={0}
+                value={tokenId}
+                onValueChange={(value) => setTokenId(value)}
+                placeholder="上位候補に加えて調べるID"
+              />
             </div>
             <details>
               <summary>介入先の実入力トークン</summary>
@@ -401,20 +387,19 @@ export default function ResearchDesk({ models, onError }: Props) {
               Displacementの固定PCAは維持します。全点を使用し、4096観測点・RAM予算を超えたら抽出せず停止します。
             </p>
             <div className="field-row">
-              <label className="field">
-                Perplexity
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={perplexity}
-                  onChange={(e) => setPerplexity(Number(e.target.value))}
-                />
-              </label>
-              <label className="field">
-                射影Seed
-                <input type="number" min={0} value={seed} onChange={(e) => setSeed(Number(e.target.value))} />
-              </label>
+              <NumberField
+                label="Perplexity"
+                min={1}
+                max={100}
+                value={perplexity}
+                onValueChange={(value) => setPerplexity(Number(value))}
+              />
+              <NumberField
+                label="射影Seed"
+                min={0}
+                value={seed}
+                onValueChange={(value) => setSeed(Number(value))}
+              />
             </div>
           </>
         )}
