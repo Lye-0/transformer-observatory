@@ -19,8 +19,8 @@ bash scripts/setup.sh
 bash scripts/start.sh
 ```
 
-Python環境は `backend/.venv`、uv管理Pythonとキャッシュは `.tools/` に配置します。
-uvとmiseが必要です。Python 3.13.15、Node.js 24.21.0、pnpm 11.24.0を使用します。
+Python仮想環境は `backend/.venv` に配置します。Python本体と依存関係のキャッシュはuvのユーザーごとの既定保存先を利用します。
+uvとmiseが必要です。Python 3.13.17、Node.js 24.21.0、pnpm 11.24.0を使用します。
 セットアップには依存関係のダウンロードが必要です。モデルはユーザー指定のローカルsafetensorsを読み込みます。
 起動時の既定ポートは8765。使用中なら空きポートを使い、そのURLを表示します。
 Ctrl+Cでバックエンドを終了します。ブラウザを閉じてもバックエンド内のジョブは継続します。

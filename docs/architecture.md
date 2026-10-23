@@ -4,7 +4,7 @@
 
 ## 責務
 
-- Python 3.13.15、PyTorch、Transformers: 実モデル推論、取得、数値検証。
+- Python 3.13.17、PyTorch、Transformers: 実モデル推論、取得、数値検証。
 - FastAPI: loopback API、セッション認証、ジョブ、ストレージ制御。
 - React/TypeScript/Three.js: 全トークンの3D軌跡、タイムライン、Inspector。
 - SQLite: 設定、モデル/Lens登録、ジョブとトレースの検索、研究レポート。

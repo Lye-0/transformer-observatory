@@ -2,6 +2,8 @@
 
 更新: 2026-10-20。提供仕様書の原文は `Transformer_Observatory_Development_Specification.md` に保存し、後続のユーザー指示をこの文書へ記録する。
 
+2026-10-22追記: WindowsのPythonを同じ3.13系列の3.13.17へ更新。セットアップスクリプトとCIの採用版も揃えた。WSL上の既存環境は今回更新・再検証していない。以下に記載した初期採用の経緯と過去の検証成果物の版は履歴として維持する。
+
 ## 配置
 
 - Windows作業clone: `C:\Users\kawau\dev\LLM\transformer-observatory`
@@ -16,14 +18,14 @@ Windowsで変更・テスト・コミットしてGitHubへpushし、WSLの独立
 
 | 対象 | 版 | 管理 |
 |---|---|---|
-| Python | 3.13.15 | uv、`.python-version`、`backend/.venv` |
-| Node.js | 24.21.0 | ルートのmise.toml |
-| pnpm | 11.24.0 | mise.tomlとpackageManager |
+| Python | 3.13.17 | uv、`.python-version`、`backend/.venv` |
+| Node.js | 24.22.1 | ルートのmise.toml |
+| pnpm | 11.28.8 | mise.tomlとpackageManager |
 | PyTorch | 2.14.1+cu130 | backend/uv.lock、公式cu130 index |
-| Transformers | 5.18.0 | backend/uv.lock |
+| Transformers | 5.20.2 | backend/uv.lock |
 
 Pythonは仕様書の3.12提案に代わり、ユーザーの希望でWSL既存環境と同じ3.13.15を採用した。グローバルPython 3.11を置き換えない。
-プロジェクト用Python本体・uvキャッシュは `.tools/`、Windows仮想環境は合意済みの `backend/.venv` に作成済み。
+初期構築時はプロジェクト用Python本体・uvキャッシュを `.tools/` に配置した。2026-10-22の整理でPython本体とキャッシュはuvのユーザーごとの既定保存先へ統一。Windows仮想環境は `backend/.venv` を維持する。
 WSLのmise本体はユーザーが導入済み。Node・pnpm・Python・依存関係を専用cloneへ導入し、両OSのビルド・CPU/CUDA検証を実施した。
 
 ## モデル
@@ -37,7 +39,7 @@ WSLのmise本体はユーザーが導入済み。Node・pnpm・Python・依存�
 
 Windows 11 Home / i7-13700K / RAM約96GB / RTX 4080 SUPER 16GB、NVIDIAドライバー616.56。WSL Ubuntu 26.04 LTS。
 Windows CPUのスレッド数とCUDA積和精度の調整理由は [数値検証](numerical-validation.md) を参照。
-uvの既定保存先で失敗したため、起動・セットアップスクリプトはプロジェクト内のPython/キャッシュ先を明示する。
+初期構築時はuvの既定保存先で失敗したため、プロジェクト内のPython/キャッシュ先を指定していた。現在はこの上書きを廃止し、通常ユーザーのuv既定保存先を使用する。Windowsで確認したPython本体の保存先は `C:\Users\kawau\AppData\Roaming\uv\python`。Codex固有LocalCacheやCodex付属Pythonを外部プロジェクトから参照しない。WSLもセットアップスクリプト上はuv既定保存先を使用するが、今回WSLの既存環境は変更・再検証していない。
 PowerShellのmise関数による引数解釈の影響を避け、Windowsスクリプトでは `mise.exe` を呼ぶ。
 Windows/WSLの仮想ディスクは同じ物理SSDを使うため、空き容量はそれぞれのバックエンドで確認する。
 
