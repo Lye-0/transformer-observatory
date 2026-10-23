@@ -19,10 +19,10 @@ Windowsで変更・テスト・コミットしてGitHubへpushし、WSLの独立
 | 対象 | 版 | 管理 |
 |---|---|---|
 | Python | 3.13.17 | uv、`.python-version`、`backend/.venv` |
-| Node.js | 24.21.0 | ルートのmise.toml |
-| pnpm | 11.24.0 | mise.tomlとpackageManager |
+| Node.js | 24.22.1 | ルートのmise.toml |
+| pnpm | 11.28.8 | mise.tomlとpackageManager |
 | PyTorch | 2.14.1+cu130 | backend/uv.lock、公式cu130 index |
-| Transformers | 5.18.0 | backend/uv.lock |
+| Transformers | 5.20.2 | backend/uv.lock |
 
 Pythonは仕様書の3.12提案に代わり、ユーザーの希望でWSL既存環境と同じ3.13.15を採用した。グローバルPython 3.11を置き換えない。
 初期構築時はプロジェクト用Python本体・uvキャッシュを `.tools/` に配置した。2026-10-22の整理でPython本体とキャッシュはuvのユーザーごとの既定保存先へ統一。Windows仮想環境は `backend/.venv` を維持する。
