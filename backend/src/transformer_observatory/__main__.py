@@ -3,20 +3,31 @@ import socket
 import threading
 import webbrowser
 
-import uvicorn
+from .startup import startup_progress
 
-from .api import create_app
+
+def create_app():
+    from .api import create_app as factory
+
+    return factory()
 
 
 def main():
     parser = argparse.ArgumentParser(description="Transformer Observatory local server")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--startup-log", help="起動時の段階・待機中のスタック・例外を保存するファイル")
     args = parser.parse_args()
     if not 0 <= args.port <= 65535:
         parser.error("portは0〜65535で指定してください")
     try:
-        app = create_app()
+        with startup_progress(args.startup_log) as progress:
+            progress("Loading server libraries")
+            import uvicorn
+
+            progress("Loading analysis libraries and preparing application")
+            app = create_app()
+            progress("Application prepared; starting HTTP server")
     except RuntimeError as exc:
         parser.exit(1, f"{exc}\n")
     # Bind once and pass the same socket to uvicorn, avoiding a free-port race.
