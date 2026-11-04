@@ -29,6 +29,7 @@ WSLはPythonを `backend/.venv/bin/python`、miseを `mise` とする。
 - `max_scaled_error = max(abs(actual-reference)/(atol+rtol*abs(reference)))`。1以下で合格。
 
 BF16/FP16の入力・出力丸めを残差加算、RoPE、Softmax後、SwiGLU積でも再現する。保存値はfloat32へ拡張し、元dtypeを別記する。
+Cacheの回帰検証では、アプリと同じ「複数TokenのPrefill＋新規TokenのDecode」を一括forwardと照合する。これとは別の「入力の先頭から全Tokenを1つずつ処理」では、FP32の積和順序差により、Qwen3実重みの約137万Logits中1成分が上記基準をわずかに超えた事例がある。取得Hookなしでも発生し、同じ入力のPrefill＋2位置では基準内だった。異なる分割のビット単位一致を契約にせず、許容値を事後に緩めたり、保存値を補正したりしない。予測IDの一致だけで全数値の一致と判定しない。
 CUDAの既定BF16縮小精度累積ではQwen3の最終MLPがCPU参照から許容範囲を超えてずれた。GPUの部分和をfloat32で累積する設定に固定し、FP16縮小精度累積・TF32も無効にした。設定はmanifestに保存する。閾値を緩めて合格させていない。
 
 このPCのWindows CPU LayerNormは複数スレッド時に処理中のネイティブ例外通知を再現した。1スレッドでは通知なく照合に合格するため、Windows既定は1、Linux既定は4スレッドとする。`OBSERVATORY_CPU_THREADS`で変更可能。

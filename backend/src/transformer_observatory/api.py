@@ -139,7 +139,11 @@ def create_app(store=None, testing=False):
         return dict(
             roots=search_roots(store),
             custom_paths=(store.get("settings", "model_search") or {}).get("paths", []),
-            backend_os="WSL" if os.environ.get("WSL_DISTRO_NAME") else "Windows" if os.name == "nt" else "Linux",
+            backend_os="WSL"
+            if os.environ.get("WSL_DISTRO_NAME")
+            else "Windows"
+            if os.name == "nt"
+            else "Linux",
         )
 
     @app.put("/api/models/search-paths")
@@ -233,7 +237,8 @@ def create_app(store=None, testing=False):
                 id=m["id"],
                 title=m["title"],
                 level=m["level"],
-                status=m["status"],
+                status=m["status"] if availability["available"] else "unavailable",
+                recorded_status=m["status"],
                 model=m["model"]["name"],
                 model_fingerprint=m["model"]["fingerprint"],
                 created_at=m["created_at"],
@@ -245,8 +250,10 @@ def create_app(store=None, testing=False):
                 description=m.get("description", ""),
                 tags=m.get("tags", []),
                 active=store.trace_busy(m["id"]),
+                **availability,
             )
             for m in store.list("traces")
+            for availability in [store.availability(m["id"])]
         ]
 
     @app.post("/api/traces/compare")

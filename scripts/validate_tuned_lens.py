@@ -29,7 +29,7 @@ def main():
     args = parser.parse_args()
     root = Path(args.output).resolve()
     store = Store(root / "data", root / "traces")
-    registration = register_model(args.model)
+    registration = register_model(str(Path(args.model).expanduser().resolve()))
     store.put("models", registration["id"], registration)
     lens = register_lens(store, registration, args.lens)
     app = create_app(store, testing=True)

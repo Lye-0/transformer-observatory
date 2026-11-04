@@ -492,7 +492,11 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
     api<any[]>('traces')
       .then((items) => {
         setTraces(items);
-        setSelected((old) => old.filter((id) => items.some((t) => t.id === id && !t.retained && !t.active)));
+        setSelected((old) =>
+          old.filter((id) =>
+            items.some((t) => t.id === id && !t.retained && !t.active && t.available !== false),
+          ),
+        );
       })
       .catch((e) => onError(String(e)));
   useEffect(() => {
@@ -723,7 +727,7 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
                 <input
                   type="checkbox"
                   aria-label={`削除対象に選択：${t.title}`}
-                  disabled={busy || t.retained || t.active}
+                  disabled={busy || t.retained || t.active || t.available === false}
                   checked={selected.includes(t.id)}
                   onChange={(e) =>
                     setSelected((items) =>
@@ -733,7 +737,7 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
                 />
                 <button
                   className="trace-open"
-                  disabled={t.status !== 'completed'}
+                  disabled={t.status !== 'completed' || t.available === false}
                   onClick={() => onOpen(t.id)}
                 >
                   <span className="trace-symbol">
@@ -747,15 +751,20 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
                   </span>
                 </button>
                 <div className="trace-state">
-                  <span className={t.status === 'completed' ? 'tag good' : 'tag warning'}>
-                    {t.status === 'completed' ? '完了' : '不完全'}
+                  <span
+                    className={t.status === 'completed' && t.available !== false ? 'tag good' : 'tag warning'}
+                  >
+                    {t.available === false ? '利用不可' : t.status === 'completed' ? '完了' : '不完全'}
                   </span>
                   <small>
                     {new Date(t.created_at * 1000).toLocaleString('ja-JP')} · {bytes(t.size_bytes)}
                   </small>
                   {t.error && <small className="warning">{t.error}</small>}
+                  {t.available === false && (
+                    <small className="warning">保存データを読み取れません。{t.availability_error}</small>
+                  )}
                   {t.tags?.length > 0 && <small>{t.tags.join(' · ')}</small>}
-                  {t.status !== 'completed' && (
+                  {t.status !== 'completed' && t.available !== false && (
                     <button
                       className="text-button"
                       onClick={() => action(async () => setPartial(await api(`traces/${t.id}`)))}
@@ -767,7 +776,7 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
                 <div className="button-row">
                   <button
                     className="text-button"
-                    disabled={busy || t.active}
+                    disabled={busy || t.active || t.available === false}
                     onClick={() => setEditing({ ...t, tagsText: (t.tags || []).join(', ') })}
                   >
                     編集
@@ -775,7 +784,7 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
                   <button
                     className="icon-button"
                     title="保存先を開く"
-                    disabled={busy}
+                    disabled={busy || t.available === false}
                     onClick={() => action(() => api('storage/open', 'POST', { trace_id: t.id }))}
                   >
                     <FolderOpen size={18} />
@@ -783,12 +792,12 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
                   <button
                     title={t.retained ? '保持を解除' : 'この実験を保持'}
                     className={t.retained ? 'icon-button active' : 'icon-button'}
-                    disabled={busy || t.active}
+                    disabled={busy || t.active || t.available === false}
                     onClick={() => action(() => api(`traces/${t.id}/retain?enabled=${!t.retained}`, 'POST'))}
                   >
                     <ShieldCheck size={18} />
                   </button>
-                  {t.status === 'completed' && (
+                  {t.status === 'completed' && t.available !== false && (
                     <a className="icon-button" title="エクスポート" href={`/api/traces/${t.id}/export`}>
                       <Download size={18} />
                     </a>
@@ -796,7 +805,7 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
                   <button
                     className="icon-button danger-text"
                     title="削除"
-                    disabled={busy || t.retained || t.active}
+                    disabled={busy || t.retained || t.active || t.available === false}
                     onClick={() => {
                       if (confirm(`「${t.title}」を削除します。よろしいですか？`))
                         action(() => api(`traces/${t.id}`, 'DELETE', undefined, { 'X-Confirm-Trace': t.id }));

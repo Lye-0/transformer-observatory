@@ -48,6 +48,32 @@ def test_csrf_host_and_origin(client):
     )
 
 
+@pytest.mark.parametrize("damage", ["owner", "manifest", "tensor"])
+def test_trace_list_reports_current_unavailability_without_repairing_files(client, damage):
+    trace_id = run_job(client, level=2)
+    store = client.app.state.store
+    root = store.path(trace_id)
+    manifest = store.manifest(trace_id)
+    if damage == "owner":
+        target = root / ".trace-owner"
+    elif damage == "manifest":
+        target = root / "manifest.json"
+    else:
+        target = store.tensor_path(trace_id, manifest["tensors"][0])
+    original = target.read_bytes()
+    target.unlink()
+    item = next(t for t in client.get("/api/traces").json() if t["id"] == trace_id)
+    assert item["status"] == "unavailable"
+    assert item["recorded_status"] == "completed"
+    assert item["available"] is False and item["availability_error"]
+    assert store.get("traces", trace_id)["status"] == "completed"
+    assert not target.exists()
+    target.write_bytes(original)
+    restored = next(t for t in client.get("/api/traces").json() if t["id"] == trace_id)
+    assert restored["available"] is True
+    assert restored["status"] == "completed"
+
+
 def test_full_job_reconnect_export_import_and_comparison(client):
     trace_id = run_job(client, level=4, attention=True)
     m = client.get(f"/api/traces/{trace_id}").json()

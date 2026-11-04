@@ -23,7 +23,8 @@ def main():
     args = parser.parse_args()
     out = Path(args.output).resolve()
     store = Store(out / "data", out / "traces")
-    registration = register_model(args.model, args.name or Path(args.model).name)
+    model_path = Path(args.model).expanduser().resolve()
+    registration = register_model(str(model_path), args.name or model_path.name)
     store.put("models", registration["id"], registration)
     jobs = Jobs(store)
     results = []
@@ -70,7 +71,9 @@ def main():
                     peak_cuda_allocated_bytes=torch.cuda.max_memory_allocated()
                     if args.device == "cuda"
                     else 0,
-                    peak_cuda_reserved_bytes=torch.cuda.max_memory_reserved() if args.device == "cuda" else 0,
+                    peak_cuda_reserved_bytes=torch.cuda.max_memory_reserved()
+                    if args.device == "cuda"
+                    else 0,
                     environment=m["environment"],
                 )
             )

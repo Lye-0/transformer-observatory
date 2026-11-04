@@ -61,8 +61,12 @@ export default function App() {
           const saved = localStorage.getItem('observatory-last-trace');
           if (saved) {
             try {
-              await api(`traces/${saved}`);
-              if (active) {
+              const traces = await api<{ id: string; status: string; available?: boolean }[]>('traces');
+              const readable = traces.some(
+                (trace) => trace.id === saved && trace.status === 'completed' && trace.available !== false,
+              );
+              if (!readable) localStorage.removeItem('observatory-last-trace');
+              if (active && readable) {
                 setTraceId(saved);
                 setNav('explorer');
               }

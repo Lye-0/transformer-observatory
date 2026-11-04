@@ -101,6 +101,40 @@ def test_huggingface_adapters_random_small_model(tmp_path, architecture):
     assert torch.isfinite(output.logits).all()
 
 
+@pytest.mark.parametrize("architecture", ["qwen3", "gpt2"])
+def test_prefill_then_decode_cache_matches_full_sequence(architecture):
+    from transformers import GPT2Config, GPT2LMHeadModel, Qwen3Config, Qwen3ForCausalLM
+
+    torch.manual_seed(42)
+    if architecture == "qwen3":
+        config = Qwen3Config(
+            vocab_size=32,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=8,
+        )
+        config._attn_implementation = "eager"
+        model = Qwen3ForCausalLM(config).eval()
+    else:
+        config = GPT2Config(vocab_size=32, n_embd=32, n_layer=2, n_head=4, n_positions=32)
+        config._attn_implementation = "eager"
+        model = GPT2LMHeadModel(config).eval()
+    ids = torch.tensor([[1, 4, 7, 9, 4, 7]])
+    with torch.inference_mode():
+        full = model(input_ids=ids, use_cache=False).logits
+        first = model(input_ids=ids[:, :4], use_cache=True)
+        cache = first.past_key_values
+        pieces = [first.logits]
+        for position in range(4, 6):
+            step = model(input_ids=ids[:, position : position + 1], past_key_values=cache, use_cache=True)
+            cache = step.past_key_values
+            pieces.append(step.logits)
+    torch.testing.assert_close(torch.cat(pieces, dim=1), full, atol=2e-5, rtol=2e-4)
+
+
 def test_shared_projection_displacement_and_metrics(tmp_path):
     store, writer, _, _ = capture_model(tmp_path, TinyModel().eval())
     project_trace(store, writer, threading.Event())

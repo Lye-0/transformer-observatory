@@ -20,6 +20,20 @@ TRACE_ID = re.compile(r"^[a-f0-9]{32}$")
 SCHEMA_VERSION = 1
 
 
+def replace_json_file(source, destination):
+    # Windows readers/scanners may briefly hold a handle without FILE_SHARE_DELETE.
+    # Keep the previous file intact; persistent permission errors must still fail.
+    delays = (0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64)
+    for attempt in range(len(delays) + 1):
+        try:
+            os.replace(source, destination)
+            return
+        except OSError as exc:
+            if getattr(exc, "winerror", None) not in {5, 32, 33} or attempt == len(delays):
+                raise
+            time.sleep(delays[attempt])
+
+
 def atomic_json(path: Path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + "." + secrets.token_hex(6) + ".tmp")
@@ -28,7 +42,7 @@ def atomic_json(path: Path, data):
             json.dump(data, f, ensure_ascii=False, allow_nan=False)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp, path)
+        replace_json_file(tmp, path)
     finally:
         tmp.unlink(missing_ok=True)
 
@@ -220,18 +234,32 @@ class Store:
             return m
 
     def manifest(self, trace_id):
-        path = self.path(trace_id)
-        p = path / "manifest.json"
-        if p.is_symlink():
-            raise ValueError("不正なmanifest")
-        m = json.loads(p.read_text(encoding="utf-8"))
-        if m.get("schema_version") != SCHEMA_VERSION or m.get("id") != trace_id:
-            raise ValueError("未対応のトレース形式")
-        return m
+        with self.lock:
+            path = self.path(trace_id)
+            p = path / "manifest.json"
+            if p.is_symlink():
+                raise ValueError("不正なmanifest")
+            m = json.loads(p.read_text(encoding="utf-8"))
+            if m.get("schema_version") != SCHEMA_VERSION or m.get("id") != trace_id:
+                raise ValueError("未対応のトレース形式")
+            return m
 
     def save_manifest(self, m):
-        atomic_json(self.path(m["id"]) / "manifest.json", m)
-        self.put("traces", m["id"], m)
+        with self.lock:
+            atomic_json(self.path(m["id"]) / "manifest.json", m)
+            self.put("traces", m["id"], m)
+
+    def availability(self, trace_id):
+        """Reachable manifest and present chunks, separate from full integrity verification."""
+        try:
+            with self.lock:
+                manifest = self.manifest(trace_id)
+                for record in manifest["tensors"]:
+                    if not self.tensor_path(trace_id, record).is_file():
+                        raise FileNotFoundError("保存したテンソルファイルが見つかりません")
+            return dict(available=True, availability_error=None)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return dict(available=False, availability_error=str(exc))
 
     def mark_incomplete(self, trace_id, reason):
         if self.get("traces", trace_id):

@@ -1,6 +1,94 @@
+import json
+import os
+
 import numpy as np
 import pytest
 from transformer_observatory.storage import Store, TraceWriter
+
+
+@pytest.mark.parametrize("code", [5, 32, 33])
+def test_atomic_json_retries_transient_windows_errors(tmp_path, monkeypatch, code):
+    from transformer_observatory import storage
+
+    path = tmp_path / "manifest.json"
+    storage.atomic_json(path, {"old": True})
+    original = storage.os.replace
+    calls = []
+
+    def blocked(source, destination):
+        calls.append(source)
+        if len(calls) < 3:
+            assert json.loads(path.read_text()) == {"old": True}
+            error = PermissionError("temporarily held file")
+            error.winerror = code
+            raise error
+        original(source, destination)
+
+    monkeypatch.setattr(storage.os, "replace", blocked)
+    monkeypatch.setattr(storage.time, "sleep", lambda _: None)
+    storage.atomic_json(path, {"new": True})
+    assert len(calls) == 3
+    assert json.loads(path.read_text()) == {"new": True}
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+@pytest.mark.parametrize("code, expected_calls", [(5, 8), (112, 1)])
+def test_atomic_json_preserves_previous_file_on_permanent_failure(
+    tmp_path, monkeypatch, code, expected_calls
+):
+    from transformer_observatory import storage
+
+    path = tmp_path / "manifest.json"
+    storage.atomic_json(path, {"old": True})
+    calls = []
+
+    def blocked(*args):
+        calls.append(args)
+        error = OSError("persistent error")
+        error.winerror = code
+        raise error
+
+    monkeypatch.setattr(storage.os, "replace", blocked)
+    monkeypatch.setattr(storage.time, "sleep", lambda _: None)
+    with pytest.raises(OSError, match="persistent error"):
+        storage.atomic_json(path, {"new": True})
+    assert len(calls) == expected_calls
+    assert json.loads(path.read_text()) == {"old": True}
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows file sharing semantics")
+def test_atomic_json_survives_real_windows_reader_handle(tmp_path):
+    import ctypes
+    import threading
+    from ctypes import wintypes
+
+    from transformer_observatory.storage import atomic_json
+
+    path = tmp_path / "manifest.json"
+    atomic_json(path, {"old": True})
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateFileW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    kernel.CreateFileW.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.CloseHandle.restype = wintypes.BOOL
+    handle = kernel.CreateFileW(str(path), 0x80000000, 1, None, 3, 0, None)
+    assert handle != wintypes.HANDLE(-1).value
+    timer = threading.Timer(0.06, kernel.CloseHandle, args=(handle,))
+    timer.start()
+    try:
+        atomic_json(path, {"new": True})
+    finally:
+        timer.join()
+    assert json.loads(path.read_text()) == {"new": True}
 
 
 def make_trace(tmp_path, level=2):
