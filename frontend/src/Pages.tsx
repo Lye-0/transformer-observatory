@@ -833,17 +833,45 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
 export function Settings({ onError }: Common) {
   const [settings, setSettings] = useState<any>(null);
   const [saved, setSaved] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    let active = true;
+    setLoadError('');
     api('settings')
-      .then(setSettings)
-      .catch((e) => onError(String(e)));
-  }, []);
-  if (!settings) return <div className="page">設定を読み込み中…</div>;
+      .then((result) => {
+        if (active) setSettings(result);
+      })
+      .catch((e) => {
+        if (active) setLoadError(String(e));
+      });
+    return () => {
+      active = false;
+    };
+  }, [attempt]);
+  if (!settings)
+    return (
+      <div className="page settings-page">
+        <h1>研究環境を整える。</h1>
+        {loadError ? (
+          <div role="alert">
+            <p>設定を読み込めませんでした。</p>
+            <p className="muted">{loadError}</p>
+            <button className="secondary" onClick={() => setAttempt((value) => value + 1)}>
+              設定を再取得
+            </button>
+          </div>
+        ) : (
+          <p role="status">設定を読み込み中…</p>
+        )}
+      </div>
+    );
   const change = (key: string, value: string) => {
     setSaved(false);
     setSettings({ ...settings, [key]: Number(value) });
   };
   async function save() {
+    setSaved(false);
     try {
       const { retention_days, cache_limit_gib, trace_limit_gib, ram_budget_mib, trace_root } = settings;
       setSettings(

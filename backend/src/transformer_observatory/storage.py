@@ -20,6 +20,61 @@ TRACE_ID = re.compile(r"^[a-f0-9]{32}$")
 SCHEMA_VERSION = 1
 
 
+def relative_tensor_path(record):
+    value = record["file"]
+    if not isinstance(value, str) or "\\" in value or ":" in value:
+        raise ValueError("不正なテンソルパス")
+    rel = Path(value)
+    if rel.is_absolute() or ".." in rel.parts or rel.suffix != ".npy":
+        raise ValueError("不正なテンソルパス")
+    return rel
+
+
+def check_present_chunks(root, records):
+    """Check referenced entries once per directory, without following filesystem links.
+
+    The trie is local to this request: missing/changed files are never hidden by a TTL cache.
+    Unreferenced files are ignored, matching the per-record presence check.
+    """
+    tree = {}
+    for record in records:
+        parts = relative_tensor_path(record).parts
+        node = tree
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+            if node is None:
+                raise ValueError("テンソルのファイルとフォルダーが競合しています")
+        if parts[-1] in node and node[parts[-1]] is not None:
+            raise ValueError("テンソルのファイルとフォルダーが競合しています")
+        node[parts[-1]] = None
+    pending = [(root, tree)] if tree else []
+    while pending:
+        folder, expected = pending.pop()
+        with os.scandir(folder) as scan:
+            entries = {entry.name: entry for entry in scan}
+        aliases = (
+            {os.path.normcase(name): entry for name, entry in entries.items()} if os.name == "nt" else {}
+        )
+        for name, children in expected.items():
+            entry = entries.get(name)
+            if entry is None and os.name == "nt":
+                # Respect case-insensitive aliases, but also case-sensitive Windows directories.
+                candidate = aliases.get(os.path.normcase(name))
+                if candidate is not None and (folder / name).exists():
+                    entry = candidate
+            if entry is None:
+                raise FileNotFoundError("保存したテンソルファイルが見つかりません")
+            if entry.is_symlink() or (os.name == "nt" and entry.is_junction()):
+                raise ValueError("リンクされたテンソル")
+            if children is None:
+                if not entry.is_file(follow_symlinks=False):
+                    raise FileNotFoundError("保存したテンソルファイルが見つかりません")
+            else:
+                if not entry.is_dir(follow_symlinks=False):
+                    raise FileNotFoundError("保存したテンソルフォルダーが見つかりません")
+                pending.append((Path(entry.path), children))
+
+
 def replace_json_file(source, destination):
     # Windows readers/scanners may briefly hold a handle without FILE_SHARE_DELETE.
     # Keep the previous file intact; persistent permission errors must still fail.
@@ -238,14 +293,17 @@ class Store:
 
     def manifest(self, trace_id):
         with self.lock:
-            path = self.path(trace_id)
-            p = path / "manifest.json"
-            if p.is_symlink():
-                raise ValueError("不正なmanifest")
-            m = json.loads(p.read_text(encoding="utf-8"))
-            if m.get("schema_version") != SCHEMA_VERSION or m.get("id") != trace_id:
-                raise ValueError("未対応のトレース形式")
-            return m
+            return self._manifest_at(self.path(trace_id), trace_id)
+
+    @staticmethod
+    def _manifest_at(path, trace_id):
+        p = path / "manifest.json"
+        if p.is_symlink():
+            raise ValueError("不正なmanifest")
+        m = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(m, dict) or m.get("schema_version") != SCHEMA_VERSION or m.get("id") != trace_id:
+            raise ValueError("未対応のトレース形式")
+        return m
 
     def save_manifest(self, m):
         with self.lock:
@@ -256,10 +314,10 @@ class Store:
         """Reachable manifest and present chunks, separate from full integrity verification."""
         try:
             with self.lock:
-                manifest = self.manifest(trace_id)
-                for record in manifest["tensors"]:
-                    if not self.tensor_path(trace_id, record).is_file():
-                        raise FileNotFoundError("保存したテンソルファイルが見つかりません")
+                root = self.path(trace_id)
+                manifest = self._manifest_at(root, trace_id)
+                check_present_chunks(root, manifest["tensors"])
+                self.path(trace_id)  # Recheck ownership/root after enumerating the directories.
             return dict(available=True, availability_error=None)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             return dict(available=False, availability_error=str(exc))
@@ -275,9 +333,7 @@ class Store:
 
     def tensor_path(self, trace_id, record):
         root = self.path(trace_id)
-        rel = Path(record["file"])
-        if rel.is_absolute() or ".." in rel.parts or rel.suffix != ".npy":
-            raise ValueError("不正なテンソルパス")
+        rel = relative_tensor_path(record)
         path = root / rel
         if path.resolve().is_relative_to(root) is False:
             raise ValueError("トレース領域外のテンソル")

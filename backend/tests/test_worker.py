@@ -100,7 +100,11 @@ def test_production_runtime_wait_cancel_reuse_and_numerics(tmp_path):
         # Settings/retention changes must reach a worker that was already prepared.
         new_root = tmp_path / "new-traces"
         new_root.mkdir()
-        store.trace_root = new_root
+        settings = client.get("/api/settings").json()
+        settings["trace_root"] = str(new_root)
+        saved = client.patch("/api/settings", json=settings)
+        assert saved.status_code == 200, saved.text
+        assert client.get("/api/settings").json()["trace_root"] == str(new_root.resolve())
         third = client.post("/api/analysis/jobs", json=request.model_dump()).json()
         third = await_state(lambda: store.get("jobs", third["id"]), {"completed", "failed"})
         assert third["state"] == "completed", third

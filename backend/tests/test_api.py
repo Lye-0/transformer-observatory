@@ -49,6 +49,31 @@ def test_csrf_host_and_origin(client):
     )
 
 
+def test_settings_save_get_and_reopen_catalog(tmp_path):
+    data_root, initial_root, new_root = tmp_path / "data", tmp_path / "traces", tmp_path / "new-traces"
+    app = create_app(Store(data_root, initial_root))
+    with TestClient(app, base_url="http://127.0.0.1") as c:
+        c.headers["x-observatory-token"] = c.get("/api/session").json()["token"]
+        initial = c.get("/api/settings").json()
+        body = {**initial, "retention_days": 14, "trace_root": str(new_root)}
+        response = c.patch("/api/settings", json=body)
+        assert response.status_code == 200, response.text
+        saved = response.json()
+        assert saved["retention_days"] == 14
+        assert saved["trace_root"] == str(new_root.resolve())
+        assert c.get("/api/settings").json()["trace_root"] == saved["trace_root"]
+        assert c.patch("/api/settings", json=body).status_code == 200
+        assert c.patch("/api/settings", json={**body, "retention_days": 0}).status_code == 422
+        assert c.get("/api/settings").json()["retention_days"] == 14
+    # Same persisted trace_root previously made both save and all later reads return 500.
+    with TestClient(create_app(Store(data_root, new_root)), base_url="http://127.0.0.1") as c:
+        c.get("/api/session")
+        response = c.get("/api/settings")
+        assert response.status_code == 200, response.text
+        assert response.json()["retention_days"] == 14
+        assert response.json()["trace_root"] == str(new_root.resolve())
+
+
 @pytest.mark.parametrize("damage", ["owner", "manifest", "tensor"])
 def test_trace_list_reports_current_unavailability_without_repairing_files(client, damage):
     trace_id = run_job(client, level=2)

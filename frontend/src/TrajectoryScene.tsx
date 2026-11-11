@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { Token } from './api';
+import { tokenLabel } from './tokenText';
 import {
   focusedCameraPosition,
   navigationTarget,
@@ -546,7 +547,7 @@ export default function TrajectoryScene(props: Props) {
       </div>
       {hover !== null && (
         <div className="scene-hover">
-          #{hover.token} · {props.tokens[hover.token]?.raw} · 観測点 {hover.stage + 1}/{props.stages}
+          #{hover.token} · {tokenLabel(props.tokens[hover.token])} · 観測点 {hover.stage + 1}/{props.stages}
         </div>
       )}
       <div className="scene-help">

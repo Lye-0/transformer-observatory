@@ -22,6 +22,7 @@ import TrajectoryScene, { tokenColor } from './TrajectoryScene';
 import FloatingPanel from './FloatingPanel';
 import Heatmap, { HeatmapDetail } from './Heatmap';
 import { colorLimit, type TensorValue } from './heatmapMath';
+import { tokenLabel, tokenTitle } from './tokenText';
 
 type PinnedValue = {
   id: string;
@@ -195,7 +196,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
       : undefined;
   const pinScale = colorLimit(pins.flatMap((p) => (p.tensor ? [p.tensor.values] : [])));
   const tensorPinCount = pins.filter((p) => p.tensor).length;
-  const context = `${token?.text || token?.raw || ''} · #${token?.position ?? 0} · ${stageLabel(substage)} · ${token?.step ? `Decode ${token.step}` : 'Prefill'}`;
+  const context = `${tokenLabel(token)} · #${token?.position ?? 0} · ${stageLabel(substage)} · ${token?.step ? `Decode ${token.step}` : 'Prefill'}`;
   const measurementId = `${id}:${token?.position}:${token?.step}:${substage}`;
   const metricPinId = `${measurementId}:metrics`;
   function addPin(value: PinnedValue) {
@@ -326,7 +327,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                 >
                   <i style={{ background: tokenColor(t.position) }} />
                   <small>{String(t.position).padStart(3, '0')}</small>
-                  <span>{t.raw}</span>
+                  <span title={tokenTitle(t)}>{tokenLabel(t)}</span>
                   <em>{t.generated ? 'GEN' : t.id}</em>
                 </button>
               ))}
@@ -335,6 +336,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
             Ctrl＋クリックで複数選択
             <br />
             選択していない軌跡も維持します。
+            <br />␠ 空白 · ↵ 改行 · ⇥ タブ
           </div>
         </aside>
         <section className="visualization" ref={visualization}>
@@ -398,11 +400,26 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
             INSPECTOR <span>#{token?.position ?? '—'}</span>
           </div>
           <div className="inspector-token">
-            <span style={{ color: tokenColor(token?.position || 0) }}>{token?.raw}</span>
+            <span title={tokenTitle(token)} style={{ color: tokenColor(token?.position || 0) }}>
+              {tokenLabel(token)}
+            </span>
             <small>
               ID {token?.id} · {m.model.hidden_size} dimensions ·{' '}
               {token?.step ? `Decode ${token.step}` : 'Prefill'}
             </small>
+            <details className="token-details" key={token?.position}>
+              <summary>元のトークン表記</summary>
+              <dl>
+                <dt>デコード文字列</dt>
+                <dd>
+                  <code>{JSON.stringify(token?.text ?? '')}</code>
+                </dd>
+                <dt>raw</dt>
+                <dd>
+                  <code>{token?.raw}</code>
+                </dd>
+              </dl>
+            </details>
           </div>
           <div className="inspector-tabs">
             {['Overview', 'Attention', 'MLP', 'Tensor', 'Prediction'].map((t) => (
@@ -897,8 +914,8 @@ function HeadConnections({ tensor, tokens }: { tensor: any; tokens: Manifest['to
       </p>
       {sorted.map(({ position, value }) => (
         <div className="prediction-row" key={position}>
-          <span>
-            #{position} {tokens[position]?.raw}
+          <span title={tokenTitle(tokens[position])}>
+            #{position} {tokenLabel(tokens[position])}
           </span>
           <b>{number(value)}</b>
         </div>
@@ -1005,7 +1022,7 @@ function Prediction({
       {level < 2 && <p className="subtle-note">Level 2以上のResidualが必要です。</p>}
       {result?.candidates.map((c: any) => (
         <div className="prediction-row" key={c.id}>
-          <span>{c.text || c.raw}</span>
+          <span title={tokenTitle(c)}>{tokenLabel(c)}</span>
           <small>ID {c.id}</small>
           <b>{(c.probability * 100).toFixed(2)}%</b>
         </div>

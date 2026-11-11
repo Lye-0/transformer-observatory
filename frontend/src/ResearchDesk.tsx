@@ -5,6 +5,7 @@ import { api, number, type Manifest, type Model } from './api';
 import Select from './Select';
 import { NumberField } from './NumberInput';
 import TrajectoryScene from './TrajectoryScene';
+import { tokenLabel, tokenTitle } from './tokenText';
 
 type Props = { models: Model[]; onError: (message: string) => void };
 const labels: Record<string, string> = {
@@ -267,9 +268,9 @@ export default function ResearchDesk({ models, onError }: Props) {
                   <summary>取得元の実トークン位置</summary>
                   <div className="token-chips">
                     {sourceTokens.map((t) => (
-                      <span key={t.position} title={`ID ${t.id}`}>
+                      <span key={t.position} title={tokenTitle(t)}>
                         <small>{t.position}</small>
-                        {t.raw}
+                        {tokenLabel(t)}
                         {t.generated ? ' / Decode' : ''}
                       </span>
                     ))}
@@ -338,9 +339,9 @@ export default function ResearchDesk({ models, onError }: Props) {
               <summary>介入先の実入力トークン</summary>
               <div className="token-chips">
                 {inputTokens.map((t) => (
-                  <span key={t.position} title={`ID ${t.id}`}>
+                  <span key={t.position} title={tokenTitle(t)}>
                     <small>{t.position}</small>
-                    {t.raw}
+                    {tokenLabel(t)}
                   </span>
                 ))}
               </div>
@@ -627,8 +628,8 @@ function StudyResult({ report }: { report: any }) {
             <tbody>
               {result.candidates.map((c: any) => (
                 <tr key={c.id}>
-                  <td>
-                    {c.text || c.raw} / {c.id}
+                  <td title={tokenTitle(c)}>
+                    {tokenLabel(c)} / {c.id}
                   </td>
                   <td>{number(c.baseline * 100)}%</td>
                   <td>{number(c.intervened * 100)}%</td>
@@ -725,8 +726,8 @@ function NonlinearScene({ result }: { result: any }) {
           onChange={(e) => setSelected([Number(e.target.value)])}
         >
           {result.tokens.map((t: any) => (
-            <option key={t.position} value={t.position}>
-              #{t.position} {t.raw} / ID {t.id}
+            <option key={t.position} value={t.position} title={tokenTitle(t)}>
+              #{t.position} {tokenLabel(t)} / ID {t.id}
             </option>
           ))}
         </Select>

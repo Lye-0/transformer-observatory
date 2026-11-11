@@ -350,3 +350,24 @@
     padding: 10px 10px 25px;
   }
 }
+.token-details {
+  font-size: 12px;
+  color: var(--muted, #8c98b5);
+}
+.token-details summary {
+  cursor: pointer;
+}
+.token-details dl {
+  margin: 8px 0 0;
+}
+.token-details dt {
+  margin-top: 6px;
+}
+.token-details dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+.token-details code {
+  color: var(--text, #cbd0e2);
+  user-select: text;
+}

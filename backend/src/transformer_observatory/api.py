@@ -482,13 +482,13 @@ def create_app(store=None, testing=False):
 
     @app.get("/api/settings")
     def settings():
-        return dict(
+        return {
             **store.settings,
-            data_root=str(store.data_root),
-            trace_root=str(store.trace_root),
-            backend_os=platform_name(),
-            free_disk_bytes=__import__("shutil").disk_usage(store.trace_root).free,
-        )
+            "data_root": str(store.data_root),
+            "trace_root": str(store.trace_root),
+            "backend_os": platform_name(),
+            "free_disk_bytes": __import__("shutil").disk_usage(store.trace_root).free,
+        }
 
     @app.patch("/api/settings")
     def update_settings(body: SettingsUpdate):
