@@ -11,7 +11,7 @@ import tempfile
 import threading
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 import numpy as np
@@ -90,11 +90,16 @@ def replace_json_file(source, destination):
 
 
 def atomic_json(path: Path, data):
+    # Encode once with the C encoder instead of streaming Python encoder tokens.
+    _atomic_json_text(path, json.dumps(data, ensure_ascii=False, allow_nan=False))
+
+
+def _atomic_json_text(path: Path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + "." + secrets.token_hex(6) + ".tmp")
     try:
         with tmp.open("w", encoding="utf-8", newline="\n") as f:
-            json.dump(data, f, ensure_ascii=False, allow_nan=False)
+            f.write(text)
             f.flush()
             os.fsync(f.fileno())
         replace_json_file(tmp, path)
@@ -132,6 +137,7 @@ class Store:
             raise ValueError("トレースのルートにリンクは指定できません")
         self.trace_root = self.trace_root.resolve()
         self.lock = threading.RLock()
+        self._connections = threading.local()
         self.previews = {}
         self.roots = {}
         with self.db() as db:
@@ -172,20 +178,48 @@ class Store:
 
     @contextmanager
     def db(self):
-        conn = sqlite3.connect(self.data_root / "catalog.sqlite3", timeout=30)
+        conn = getattr(self._connections, "current", None)
+        owned = conn is None
+        if owned:
+            conn = sqlite3.connect(self.data_root / "catalog.sqlite3", timeout=30)
         try:
-            conn.execute("PRAGMA journal_mode=WAL")
+            if owned:
+                conn.execute("PRAGMA journal_mode=WAL")
             with conn:
                 yield conn
         finally:
+            if owned:
+                conn.close()
+
+    @contextmanager
+    def connection_session(self):
+        """Reuse this thread's connection, committing each db() call independently.
+
+        Keeping WAL open avoids a last-connection checkpoint after every chunk.
+        This is a connection lifetime, never a transaction around the whole job.
+        """
+        if getattr(self._connections, "current", None) is not None:
+            yield
+            return
+        conn = sqlite3.connect(self.data_root / "catalog.sqlite3", timeout=30)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            self._connections.current = conn
+            yield
+        finally:
+            self._connections.__dict__.pop("current", None)
             conn.close()
 
     def put(self, table, key, data):
+        with self.lock:
+            self._put_json(table, key, json.dumps(data, ensure_ascii=False, allow_nan=False))
+
+    def _put_json(self, table, key, text):
         assert table in {"traces", "jobs", "models", "settings", "studies", "lenses"}
         with self.lock, self.db() as db:
             db.execute(
                 f"INSERT OR REPLACE INTO {table} VALUES (?, ?)",
-                (key, json.dumps(data, ensure_ascii=False, allow_nan=False)),
+                (key, text),
             )
 
     def get(self, table, key):
@@ -307,8 +341,9 @@ class Store:
 
     def save_manifest(self, m):
         with self.lock:
-            atomic_json(self.path(m["id"]) / "manifest.json", m)
-            self.put("traces", m["id"], m)
+            text = json.dumps(m, ensure_ascii=False, allow_nan=False)
+            _atomic_json_text(self.path(m["id"]) / "manifest.json", text)
+            self._put_json("traces", m["id"], text)
 
     def availability(self, trace_id):
         """Reachable manifest and present chunks, separate from full integrity verification."""
@@ -421,12 +456,16 @@ class Store:
 
 
 class TraceWriter:
-    def __init__(self, store, trace_id, manifest):
+    def __init__(self, store, trace_id, manifest, diagnostics=None):
         self.store, self.trace_id, self.manifest = store, trace_id, manifest
+        self.diagnostics = diagnostics
         self.root = store.create(trace_id, manifest)
         self.bytes = 0
         self.limit = int(store.settings["trace_limit_gib"] * 2**30)
         self.counter = 0
+
+    def _measure(self, operation):
+        return self.diagnostics.measure(operation) if self.diagnostics else nullcontext()
 
     def write(
         self,
@@ -454,12 +493,15 @@ class TraceWriter:
         self.counter += 1
         path = folder / name
         tmp = path.with_suffix(".tmp")
-        with tmp.open("wb") as f:
-            np.save(f, a, allow_pickle=False)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, path)
+        with self._measure("chunk_write"):
+            with tmp.open("wb") as f:
+                np.save(f, a, allow_pickle=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path)
         self.bytes += path.stat().st_size
+        with self._measure("chunk_hash"):
+            checksum = digest(path)
         record = dict(
             file=path.relative_to(self.root).as_posix(),
             kind=kind,
@@ -472,13 +514,14 @@ class TraceWriter:
             provenance=provenance,
             shape=list(a.shape),
             dtype=str(a.dtype),
-            sha256=digest(path),
+            sha256=checksum,
         )
         self.manifest["tensors"].append(record)
         if kind == "residual" and stage not in self.manifest["stages"]:
             self.manifest["stages"].append(stage)
         # Journal every chunk so cancellation/crashes retain valid partial metadata.
-        self.store.save_manifest(self.manifest)
+        with self._measure("manifest_save"):
+            self.store.save_manifest(self.manifest)
         return record
 
     def finalize(self, integrity):

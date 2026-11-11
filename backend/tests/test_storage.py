@@ -1,5 +1,7 @@
 import json
 import os
+import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -96,6 +98,78 @@ def make_trace(tmp_path, level=2):
     store = Store(tmp_path / "data", tmp_path / "traces")
     writer = TraceWriter(store, "a" * 32, dict(title="fixture", level=level, model={}, tokens=[]))
     return store, writer
+
+
+def test_each_chunk_is_durable_and_catalog_matches_manifest(tmp_path):
+    from transformer_observatory.storage import digest
+
+    store, writer = make_trace(tmp_path)
+    writer.manifest["title"] = "部分データの復旧"
+    for index in range(3):
+        writer.write(np.full((2, 4), index), kind="residual", stage=f"layer.{index}")
+        reopened = Store(store.data_root, store.trace_root, recover=False)
+        manifest = reopened.manifest(writer.trace_id)
+        assert manifest == reopened.get("traces", writer.trace_id)
+        assert manifest["status"] == "incomplete"
+        assert len(manifest["tensors"]) == index + 1
+        for record in manifest["tensors"]:
+            assert digest(reopened.tensor_path(writer.trace_id, record)) == record["sha256"]
+
+
+def test_invalid_manifest_does_not_replace_file_or_catalog(tmp_path):
+    store, writer = make_trace(tmp_path)
+    before = store.get("traces", writer.trace_id)
+    writer.manifest["invalid"] = float("nan")
+    with pytest.raises(ValueError):
+        store.save_manifest(writer.manifest)
+    assert store.manifest(writer.trace_id) == before
+    assert store.get("traces", writer.trace_id) == before
+
+
+def test_connection_session_commits_each_chunk_and_closes_on_failure(tmp_path):
+    store, writer = make_trace(tmp_path)
+    with pytest.raises(RuntimeError, match="injected"):
+        with store.connection_session():
+            with store.connection_session():  # Nested lifetimes must not close the outer connection.
+                for index in range(3):
+                    writer.write(np.full((2, 4), index), kind="residual", stage=f"layer.{index}")
+                    observer = Store(store.data_root, store.trace_root, recover=False)
+                    assert len(observer.get("traces", writer.trace_id)["tensors"]) == index + 1
+                    assert observer.manifest(writer.trace_id) == observer.get("traces", writer.trace_id)
+            raise RuntimeError("injected")
+    reopened = Store(store.data_root, store.trace_root, recover=False)
+    assert len(reopened.manifest(writer.trace_id)["tensors"]) == 3
+    assert not hasattr(store._connections, "current")
+    # A completed lifetime leaves no open WAL handle (also checked on Windows).
+    assert not (store.data_root / "catalog.sqlite3-wal").exists()
+
+
+def test_committed_chunks_recover_after_process_exits_with_open_connection(tmp_path):
+    script = """
+import os
+import sys
+from pathlib import Path
+import numpy as np
+from transformer_observatory.storage import Store, TraceWriter
+
+root = Path(sys.argv[1])
+store = Store(root / "data", root / "traces")
+with store.connection_session():
+    writer = TraceWriter(store, "a" * 32, dict(title="crash", level=2, model={}, tokens=[]))
+    store.put("jobs", writer.trace_id, dict(id=writer.trace_id, state="capturing"))
+    for index in range(3):
+        writer.write(np.full((2, 4), index), kind="residual", stage=f"layer.{index}")
+    os._exit(0)  # Bypass connection.close(), finally blocks, and normal WAL checkpointing.
+"""
+    result = subprocess.run([sys.executable, "-c", script, str(tmp_path)], capture_output=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    recovered = Store(tmp_path / "data", tmp_path / "traces")
+    manifest = recovered.manifest("a" * 32)
+    assert manifest["status"] == "incomplete"
+    assert recovered.get("jobs", "a" * 32)["state"] == "failed"
+    assert len(manifest["tensors"]) == 3
+    for index, record in enumerate(manifest["tensors"]):
+        np.testing.assert_array_equal(recovered.load("a" * 32, record), np.full((2, 4), index))
 
 
 def test_level_one_discards_raw_only_after_success(tmp_path):

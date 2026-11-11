@@ -15,6 +15,7 @@ import transformers
 from .analysis import project_trace
 from .capture import Cancelled, Capture
 from .catalog import ModelCatalog
+from .diagnostics import AnalysisDiagnostics
 from .models import TINY_ID, load_model, load_tokenizer, tokenize
 from .runtime import configure_runtime
 from .schema import TERMINAL, AnalysisRequest
@@ -158,7 +159,15 @@ class Jobs(ModelCatalog):
         return self.store.get("jobs", trace_id)
 
     def run(self, trace_id, request: AnalysisRequest):
+        with self.store.connection_session():
+            self._run(trace_id, request)
+
+    def _run(self, trace_id, request: AnalysisRequest):
         model, capture, writer = None, None, None
+        diagnostics = AnalysisDiagnostics(
+            trace_id, self.store.data_root / "diagnostics" / f"analysis-{trace_id}.json"
+        )
+        diagnostics.start()
         event = self.cancellations[trace_id]
         try:
             if event.is_set():
@@ -200,9 +209,10 @@ class Jobs(ModelCatalog):
             manifest["query_to_kv_heads"] = [
                 h // (registration["heads"] // kv_heads) for h in range(registration["heads"])
             ]
-            writer = TraceWriter(self.store, trace_id, manifest)
+            writer = TraceWriter(self.store, trace_id, manifest, diagnostics)
             self.update(trace_id, state="loading", stage=1, percent=7, detail="モデルと解析アダプターを準備")
-            model = load_model(registration, pf["device"], getattr(torch, pf["dtype"]))
+            with diagnostics.measure("model_load"):
+                model = load_model(registration, pf["device"], getattr(torch, pf["dtype"]))
             if event.is_set():
                 raise Cancelled()
             self.update(
@@ -235,7 +245,7 @@ class Jobs(ModelCatalog):
                     raise Cancelled()
                 recomputed = step > 0 and registration["id"] == TINY_ID
                 capture.set_step(step, range(len(ids)) if step == 0 else [len(ids) - 1], recomputed)
-                with torch.inference_mode():
+                with diagnostics.measure("forward"), torch.inference_mode():
                     result = model(
                         input_ids=input_tensor, past_key_values=cache, use_cache=registration["id"] != TINY_ID
                     )
@@ -296,7 +306,8 @@ class Jobs(ModelCatalog):
                 percent=83,
                 detail="全観測点の共通PCAと高次元指標を計算",
             )
-            project_trace(self.store, writer, event)
+            with diagnostics.measure("projection"):
+                project_trace(self.store, writer, event)
             if event.is_set():
                 raise Cancelled()
             self.update(trace_id, state="preparing", stage=5, percent=98, detail="整合性と描画データを確定")
@@ -349,6 +360,7 @@ class Jobs(ModelCatalog):
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             self.cancellations.pop(trace_id, None)
+            diagnostics.close()
 
     def persist_checks(self, writer, capture):
         if writer and capture:
