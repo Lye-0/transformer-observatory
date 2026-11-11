@@ -1,5 +1,6 @@
 import argparse
 import socket
+import sys
 import threading
 import webbrowser
 from pathlib import Path
@@ -14,6 +15,11 @@ def create_app():
 
 
 def main():
+    # Redirected Windows streams can use an encoding without Japanese glyphs.
+    # Preserve that encoding, but keep help and errors printable on any locale.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="backslashreplace")
     parser = argparse.ArgumentParser(description="Transformer Observatory local server")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-browser", action="store_true")

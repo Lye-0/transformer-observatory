@@ -1,10 +1,13 @@
+import os
 import subprocess
 import sys
 
 import pytest
 
 
-def test_help_does_not_load_analysis_libraries():
+@pytest.mark.parametrize("encoding", ["utf-8", "cp1252"])
+@pytest.mark.parametrize("arguments, returncode", [(["--help"], 0), (["--port", "65536"], 2)])
+def test_cli_output_does_not_load_analysis_libraries(encoding, arguments, returncode):
     script = """
 import runpy
 import sys
@@ -14,12 +17,26 @@ def reject_heavy_import(name, args):
         raise AssertionError("help must not load analysis libraries")
 
 sys.addaudithook(reject_heavy_import)
-sys.argv = ["transformer_observatory", "--help"]
+sys.argv = ["transformer_observatory", *sys.argv[1:]]
 runpy.run_module("transformer_observatory", run_name="__main__")
 """
-    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=15)
-    assert result.returncode == 0, result.stderr
-    assert "--startup-log" in result.stdout
+    result = subprocess.run(
+        [sys.executable, "-c", script, *arguments],
+        env={**os.environ, "PYTHONIOENCODING": f"{encoding}:strict"},
+        capture_output=True,
+        encoding=encoding,
+        timeout=15,
+    )
+    assert result.returncode == returncode, result.stderr
+    if returncode == 0:
+        assert "--startup-log" in result.stdout
+        message = "起動時の段階・待機中のスタック・例外を保存するファイル"
+        output = result.stdout
+    else:
+        message = "portは0〜65535で指定してください"
+        output = result.stderr
+    assert message.encode(encoding, errors="backslashreplace").decode(encoding) in output
+    assert "Traceback" not in result.stderr
 
 
 @pytest.mark.parametrize("failure", [KeyboardInterrupt, ValueError])
