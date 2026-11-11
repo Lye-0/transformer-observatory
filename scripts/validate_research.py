@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+
 from transformer_observatory.jobs import Jobs
 from transformer_observatory.research import Research
 from transformer_observatory.schema import StudyRequest

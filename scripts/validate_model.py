@@ -7,6 +7,7 @@ from pathlib import Path
 
 import psutil
 import torch
+
 from transformer_observatory.analysis import compare
 from transformer_observatory.jobs import Jobs
 from transformer_observatory.models import register_model

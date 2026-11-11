@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from fastapi.testclient import TestClient
+
 from transformer_observatory.api import create_app
 from transformer_observatory.lenses import apply_lens, register_lens
 from transformer_observatory.models import load_model, load_tokenizer, register_model
