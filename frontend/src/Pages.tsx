@@ -811,15 +811,28 @@ export function Library({ onOpen, onError }: Common & { onOpen: (id: string) => 
                     </a>
                   )}
                   <button
-                    className="icon-button danger-text"
-                    title="削除"
-                    disabled={busy || t.retained || t.active || t.available === false}
+                    className={t.available === false ? 'text-button danger-text' : 'icon-button danger-text'}
+                    title={t.available === false ? '一覧から削除（保存先のファイルは残します）' : '削除'}
+                    aria-label={`「${t.title}」を${t.available === false ? '一覧から削除' : '削除'}`}
+                    disabled={busy || t.active || (t.retained && t.available !== false)}
                     onClick={() => {
-                      if (confirm(`「${t.title}」を削除します。よろしいですか？`))
-                        action(() => api(`traces/${t.id}`, 'DELETE', undefined, { 'X-Confirm-Trace': t.id }));
+                      const catalogOnly = t.available === false;
+                      const message = catalogOnly
+                        ? `「${t.title}」を一覧から削除します。保存先のファイルは削除しません。よろしいですか？`
+                        : `「${t.title}」を削除します。よろしいですか？`;
+                      if (confirm(message))
+                        action(() =>
+                          api(
+                            `traces/${t.id}${catalogOnly ? '?catalog_only=true' : ''}`,
+                            'DELETE',
+                            undefined,
+                            { 'X-Confirm-Trace': t.id },
+                          ),
+                        );
                     }}
                   >
                     <Trash2 size={18} />
+                    {t.available === false && '一覧から削除'}
                   </button>
                 </div>
               </article>

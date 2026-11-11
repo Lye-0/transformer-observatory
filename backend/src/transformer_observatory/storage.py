@@ -407,6 +407,19 @@ class Store:
             with self.db() as db:
                 db.execute("DELETE FROM traces WHERE id=?", (trace_id,))
 
+    def forget_unavailable(self, trace_id):
+        """Remove an unusable catalog entry without deleting any filesystem data."""
+        with self.lock:
+            if not TRACE_ID.fullmatch(trace_id) or self.get("traces", trace_id) is None:
+                raise FileNotFoundError("トレースが見つかりません")
+            if self.trace_busy(trace_id):
+                raise ValueError("実行中のトレースは一覧から削除できません")
+            if self.availability(trace_id)["available"]:
+                raise ValueError("利用可能なトレースです。一覧を更新して削除方法を確認してください")
+            with self.db() as db:
+                db.execute("DELETE FROM traces WHERE id=?", (trace_id,))
+            self.roots.pop(trace_id, None)
+
     def cleanup_preview(self):
         now = time.time()
         candidates = []

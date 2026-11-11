@@ -100,6 +100,79 @@ def test_trace_list_reports_current_unavailability_without_repairing_files(clien
     assert restored["status"] == "completed"
 
 
+@pytest.mark.parametrize("damage", ["owner", "manifest", "tensor", "missing_root"])
+def test_forget_unavailable_only_removes_catalog_entry(client, damage):
+    store = client.app.state.store
+    trace_id = "e" * 32
+    manifest = dict(title="利用不可の履歴", level=2, tokens=[], model=dict(name="fixture", fingerprint="fixture"))
+    root = store.create(trace_id, manifest)
+    tensor = root / "value.npy"
+    tensor.write_bytes(b"untouched")
+    manifest["tensors"] = [dict(file="value.npy")]
+    store.save_manifest(manifest)
+    if damage == "owner":
+        (root / ".trace-owner").write_text("another owner")
+    elif damage == "manifest":
+        (root / "manifest.json").write_text("broken")
+    elif damage == "tensor":
+        tensor.unlink()
+    else:
+        for path in root.iterdir():
+            path.unlink()
+        root.rmdir()
+    before = {p.name: p.read_bytes() for p in root.iterdir()} if root.exists() else None
+    endpoint = f"/api/traces/{trace_id}?catalog_only=true"
+    assert client.delete(endpoint).status_code == 400
+    assert store.get("traces", trace_id) is not None
+    response = client.delete(endpoint, headers={"x-confirm-trace": trace_id})
+    assert response.status_code == 200, response.text
+    assert response.json() == dict(deleted=True, catalog_only=True)
+    assert store.get("traces", trace_id) is None
+    assert not any(t["id"] == trace_id for t in client.get("/api/traces").json())
+    after = {p.name: p.read_bytes() for p in root.iterdir()} if root.exists() else None
+    assert after == before
+    assert client.delete(endpoint, headers={"x-confirm-trace": trace_id}).status_code == 404
+
+
+@pytest.mark.parametrize("active", ["job", "study", None])
+def test_forget_rechecks_activity_and_availability(client, active):
+    store = client.app.state.store
+    trace_id = "e" * 32
+    manifest = dict(title="fixture", level=2, tokens=[], model={})
+    root = store.create(trace_id, manifest)
+    (root / ".trace-owner").write_text("wrong")
+    if active == "job":
+        store.put("jobs", trace_id, dict(id=trace_id, state="capturing"))
+    elif active == "study":
+        store.put("studies", "study", dict(id="study", state="running", request=dict(trace_ids=[trace_id])))
+    else:
+        # Files may have been restored since the unavailable row was displayed.
+        (root / ".trace-owner").write_text(trace_id)
+    response = client.delete(
+        f"/api/traces/{trace_id}?catalog_only=true", headers={"x-confirm-trace": trace_id}
+    )
+    assert response.status_code == 400, response.text
+    assert store.get("traces", trace_id) is not None
+    assert root.exists()
+
+
+def test_unavailable_retained_entry_can_be_forgotten_without_deleting_files(client):
+    store = client.app.state.store
+    trace_id = "e" * 32
+    manifest = dict(title="fixture", level=2, tokens=[], model={})
+    root = store.create(trace_id, manifest)
+    manifest["retained"] = True
+    store.save_manifest(manifest)
+    (root / ".trace-owner").write_text("wrong")
+    assert client.delete(f"/api/traces/{trace_id}", headers={"x-confirm-trace": trace_id}).status_code == 400
+    response = client.delete(
+        f"/api/traces/{trace_id}?catalog_only=true", headers={"x-confirm-trace": trace_id}
+    )
+    assert response.status_code == 200, response.text
+    assert (root / "manifest.json").exists()
+    assert (root / ".trace-owner").read_text() == "wrong"
+
+
 def test_full_job_reconnect_export_import_and_comparison(client):
     trace_id = run_job(client, level=4, attention=True)
     m = client.get(f"/api/traces/{trace_id}").json()

@@ -466,11 +466,14 @@ def create_app(store=None, testing=False):
         return dict(retained=m["retained"], storage_root=m["storage_root"])
 
     @app.delete("/api/traces/{trace_id}")
-    def delete(trace_id: str, request: Request):
+    def delete(trace_id: str, request: Request, catalog_only: bool = False):
         if request.headers.get("x-confirm-trace") != trace_id:
             raise HTTPException(400, "削除対象の確認が必要です")
-        store.delete(trace_id)
-        return dict(deleted=True)
+        if catalog_only:
+            store.forget_unavailable(trace_id)
+        else:
+            store.delete(trace_id)
+        return dict(deleted=True, catalog_only=catalog_only)
 
     @app.post("/api/storage/cleanup/preview")
     def cleanup_preview():

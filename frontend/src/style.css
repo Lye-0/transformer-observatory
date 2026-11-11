@@ -958,7 +958,8 @@ input[type='range'] {
 .warning {
   color: #ddbc8c;
 }
-.danger-text {
+.danger-text,
+.text-button.danger-text {
   color: #dfa4a8;
 }
 .panel {
@@ -1443,6 +1444,9 @@ input[type='range'] {
   font-weight: 500;
   font-size: 13px;
   color: #dedfeb;
+}
+.trace-open > span:last-child {
+  min-width: 0;
 }
 .trace-open small {
   display: block;
