@@ -36,7 +36,7 @@ def test_startup_diagnostics_preserve_failure(tmp_path, monkeypatch, capsys, fai
     with pytest.raises(failure):
         entrypoint.main()
     text = path.read_text(encoding="utf-8")
-    assert "Loading analysis libraries" in text
+    assert "Preparing lightweight application" in text
     assert f"{failure.__name__}: injected startup failure" in text
     assert "Traceback" in text
     assert "pid=" in text

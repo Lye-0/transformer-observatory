@@ -6,6 +6,7 @@ import zipfile
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+
 from transformer_observatory.api import create_app
 from transformer_observatory.storage import Store
 

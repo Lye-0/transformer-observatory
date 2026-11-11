@@ -1,3 +1,4 @@
+import { RuntimeLoading } from './RuntimeLoading';
 import { useEffect, useState } from 'react';
 import { Activity, Download, Loader2 } from 'lucide-react';
 import { api, number, type Manifest, type Model } from './api';
@@ -209,6 +210,7 @@ export default function ResearchDesk({ models, onError }: Props) {
         ))}
       </div>
       <section className="panel research-form">
+        <RuntimeLoading scope="research" />
         {tab === 'intervention' && (
           <>
             <div className="panel-heading">

@@ -1,0 +1,22 @@
+/* Helix Thread, adapted from STATE OF PLAY v4.8.0. */
+@import './internal/foundation/continuum/loaders.css';
+.sop-foundation.sop-motion-loader.sop-helix-thread-loader {
+  --ld-accent: #b7a9fa;
+  --ld-secondary: #85d5c2;
+  --ld-size: 82px;
+  --ld-stage-height: 98px;
+  color: var(--text, #d5d7e7);
+  font: inherit;
+  width: 100%;
+}
+.sop-foundation.sop-motion-loader .ct-loader-stage {
+  padding: 6px 0;
+}
+.sop-foundation.sop-motion-loader .ff-description {
+  display: none;
+}
+.sop-foundation.sop-motion-loader .ct-loader-status {
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0;
+}

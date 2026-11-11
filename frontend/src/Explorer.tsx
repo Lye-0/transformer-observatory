@@ -1,3 +1,4 @@
+import { RuntimeLoading } from './RuntimeLoading';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownToLine,
@@ -761,6 +762,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                   </option>
                 ))}
             </Select>
+            <RuntimeLoading scope="compare" />
             <button className="secondary" disabled={!compareId || comparing} onClick={compare}>
               {comparing ? '共通PCAを計算中…' : '比較する'}
             </button>
@@ -999,6 +1001,7 @@ function Prediction({
       >
         {busy ? 'モデルを読み込んで計算中…' : lensId ? 'Tuned Lensを計算' : 'Logit Lensを計算'}
       </button>
+      <RuntimeLoading scope="lens" />
       {level < 2 && <p className="subtle-note">Level 2以上のResidualが必要です。</p>}
       {result?.candidates.map((c: any) => (
         <div className="prediction-row" key={c.id}>

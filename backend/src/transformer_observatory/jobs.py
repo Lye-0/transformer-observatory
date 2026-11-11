@@ -14,47 +14,20 @@ import transformers
 
 from .analysis import project_trace
 from .capture import Cancelled, Capture
-from .model_discovery import inspect_model
-from .models import TINY_ID, capabilities, load_model, load_tokenizer, tiny_registration, tokenize
+from .catalog import ModelCatalog
+from .models import TINY_ID, load_model, load_tokenizer, tokenize
 from .runtime import configure_runtime
 from .schema import TERMINAL, AnalysisRequest
 from .storage import TraceWriter
 
 
-class Jobs:
+class Jobs(ModelCatalog):
     def __init__(self, store):
         configure_runtime()
         self.store = store
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="observatory")
         self.cancellations = {}
         self.closed = False
-
-    def models(self):
-        models = [self.current_capabilities(m) for m in [tiny_registration(), *self.store.list("models")]]
-        for model in models:
-            inspection = inspect_model(model["path"]) if model.get("path") else None
-            model["available"] = inspection is None or inspection["status"] == "available"
-            model["availability_reason"] = inspection["reason"] if inspection else "内蔵の数値検証モデル"
-        return models
-
-    def current_capabilities(self, model):
-        current = capabilities(model["architecture"])
-        for key in ["interventions", "tuned_lens"]:
-            model["capabilities"][key] = current[key]
-        if any(lens["model_fingerprint"] == model["fingerprint"] for lens in self.store.list("lenses")):
-            model["capabilities"]["tuned_lens"] = "学習済みローカル重みを登録済み"
-        return model
-
-    def model(self, model_id):
-        if model_id == TINY_ID:
-            return self.current_capabilities(tiny_registration())
-        registration = self.store.get("models", model_id)
-        if not registration:
-            raise ValueError("モデルが登録されていません")
-        inspection = inspect_model(registration["path"])
-        if inspection["status"] != "available":
-            raise ValueError(f"Model Managerで保存場所を再指定してください: {inspection['reason']}")
-        return self.current_capabilities(registration)
 
     def preflight(self, request):
         m = self.model(request.model_id)
@@ -167,6 +140,8 @@ class Jobs:
         with self.store.lock:
             previous = self.store.get("jobs", job_id) or dict(id=job_id)
             previous.update(values, updated_at=time.time())
+            if previous.get("state") in TERMINAL:
+                previous["elapsed_seconds"] = previous["updated_at"] - previous["created_at"]
             self.store.put("jobs", job_id, previous)
 
     def cancel(self, trace_id):
@@ -175,7 +150,10 @@ class Jobs:
             raise ValueError("ジョブがありません")
         if j["state"] in TERMINAL:
             return j
-        self.cancellations[trace_id].set()
+        event = self.cancellations.get(trace_id)
+        if event is None:
+            return self.store.get("jobs", trace_id)
+        event.set()
         self.update(trace_id, state="cancelling", detail="安全な演算境界で中止します")
         return self.store.get("jobs", trace_id)
 

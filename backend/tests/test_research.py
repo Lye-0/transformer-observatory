@@ -6,6 +6,7 @@ import pytest
 import torch
 from fastapi.testclient import TestClient
 from safetensors.torch import save_file
+
 from transformer_observatory.api import create_app
 from transformer_observatory.lenses import apply_lens, register_lens
 from transformer_observatory.models import TinyModel, tiny_registration

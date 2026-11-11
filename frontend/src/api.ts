@@ -7,7 +7,7 @@ export async function connect() {
   return data;
 }
 
-export async function api<T = any>(
+async function request<T = any>(
   path: string,
   method = 'GET',
   body?: unknown,
@@ -33,6 +33,79 @@ export async function api<T = any>(
     throw new Error(typeof reason === 'string' ? reason : JSON.stringify(reason));
   }
   return response.json();
+}
+
+export type RuntimeStatus = {
+  state: 'idle' | 'starting' | 'ready' | 'failed';
+  error?: string | null;
+  pid?: number;
+};
+type RuntimeView = { status: RuntimeStatus; operations: { id: number; path: string }[] };
+let runtimeView: RuntimeView = { status: { state: 'idle' }, operations: [] };
+const runtimeListeners = new Set<() => void>();
+export const runtimeSnapshot = () => runtimeView;
+export const subscribeRuntime = (listener: () => void) => {
+  runtimeListeners.add(listener);
+  return () => {
+    runtimeListeners.delete(listener);
+  };
+};
+function publishRuntime(change: Partial<RuntimeView>) {
+  runtimeView = { ...runtimeView, ...change };
+  runtimeListeners.forEach((listener) => listener());
+}
+let preparing: Promise<void> | undefined;
+export function prepareRuntime(retry = false): Promise<void> {
+  if (preparing) return preparing;
+  preparing = (async () => {
+    try {
+      let status = await request<RuntimeStatus>('runtime/start', 'POST', { retry });
+      publishRuntime({ status });
+      while (status.state === 'starting') {
+        await new Promise((resolve) => window.setTimeout(resolve, 700));
+        status = await request<RuntimeStatus>('runtime');
+        publishRuntime({ status });
+      }
+      if (status.state !== 'ready') throw new Error(status.error || '解析エンジンを準備できませんでした');
+    } catch (error) {
+      publishRuntime({ status: { state: 'failed', error: String(error) } });
+      throw error;
+    } finally {
+      preparing = undefined;
+    }
+  })();
+  return preparing;
+}
+let operationId = 0;
+export async function api<T = any>(
+  path: string,
+  method = 'GET',
+  body?: unknown,
+  headers?: HeadersInit,
+): Promise<T> {
+  const heavy =
+    method === 'POST' &&
+    /^(analysis\/preflight|models\/register|models\/[^/]+\/relocate|traces\/compare|traces\/[^/]+\/lens|research\/studies|research\/lenses\/register)$/.test(
+      path,
+    );
+  if (!heavy) return request<T>(path, method, body, headers);
+  const id = ++operationId;
+  publishRuntime({ operations: [...runtimeView.operations, { id, path }] });
+  try {
+    await prepareRuntime();
+    return await request<T>(path, method, body, headers);
+  } catch (error) {
+    if (runtimeView.status.state === 'ready') {
+      try {
+        publishRuntime({ status: await request<RuntimeStatus>('runtime') });
+      } catch {
+        /* Keep the operation's original error. */
+      }
+    }
+    throw error;
+  } finally {
+    publishRuntime({ operations: runtimeView.operations.filter((item) => item.id !== id) });
+  }
 }
 
 export async function upload(file: File) {
@@ -110,4 +183,6 @@ export type Job = {
   detail: string;
   error?: string;
   diagnostic?: string;
+  created_at?: number;
+  elapsed_seconds?: number;
 };

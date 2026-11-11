@@ -1,8 +1,6 @@
 import os
 from pathlib import Path
 
-import torch
-
 
 class InstanceLock:
     """One backend per catalog; OS releases the lock even after a crash."""
@@ -47,6 +45,8 @@ class InstanceLock:
 
 
 def configure_runtime():
+    import torch
+
     # Eager CUDA BF16 reduced-precision partial sums diverged from the independent
     # CPU reference at Qwen3's final MLP. Use float32 accumulation, retaining BF16
     # inputs/outputs and the same published tolerances.

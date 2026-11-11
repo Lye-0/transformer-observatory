@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import pytest
+
 from transformer_observatory.storage import Store, TraceWriter
 
 

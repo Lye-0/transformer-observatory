@@ -1,0 +1,35 @@
+.runtime-loading {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 14px;
+  margin-block: 12px;
+  border: 1px solid var(--border, #292c3f);
+  border-radius: 8px;
+  background: var(--panel, #10131e);
+}
+.runtime-loading p {
+  margin: 0;
+  max-width: 38ch;
+  font-size: 12px;
+  color: var(--muted, #959db8);
+  line-height: 1.7;
+}
+.runtime-failure {
+  margin: 12px 24px;
+  padding: 12px 16px;
+  border: 1px solid #7d6273;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.runtime-failure button {
+  margin-left: 12px;
+}
+.runtime-failure details {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.analysis-preparing {
+  margin-inline: auto;
+  margin-bottom: 20px;
+}

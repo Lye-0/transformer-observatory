@@ -1,3 +1,4 @@
+import { RuntimeLoading } from './RuntimeLoading';
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
@@ -177,6 +178,7 @@ export default function ModelManager({ models, reload, onError, onReturn, onRegi
       </p>
 
       <section className="panel model-registration" aria-labelledby="model-register-title">
+        <RuntimeLoading scope="models" />
         <div className="panel-heading">
           <span id="model-register-title">
             <FolderOpen size={17} />

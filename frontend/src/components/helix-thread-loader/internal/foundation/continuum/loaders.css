@@ -1,0 +1,141 @@
+/* Helix Thread motion, adapted from STATE OF PLAY v4.8.0. */
+.sop-foundation.sop-motion-loader {
+  --ld-size: 112px;
+  --ld-accent: #c4dbd9;
+  --ld-secondary: #a5b5d7;
+  --ld-ink: #dce5e5;
+  --ld-track: #87979a32;
+  --ld-duration: 2.8s;
+  max-width: 360px;
+  color: inherit;
+  font:
+    12px/1.5 Arial,
+    'Yu Gothic',
+    sans-serif;
+  text-align: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  isolation: isolate;
+}
+.sop-foundation.sop-motion-loader .ff-heading {
+  display: none;
+}
+.sop-foundation.sop-motion-loader .ff-description {
+  font-size: 11px;
+  text-align: center;
+  color: inherit;
+  opacity: 0.7;
+}
+.sop-foundation.sop-motion-loader .ff-eyebrow {
+  display: none;
+}
+.sop-foundation.sop-motion-loader .ct-loader-stage {
+  display: grid;
+  place-items: center;
+  min-height: var(--ld-stage-height, 164px);
+  isolation: isolate;
+  overflow: hidden;
+  padding: 22px 0;
+  pointer-events: none;
+}
+.sop-foundation.sop-motion-loader .ct-loader-body {
+  position: relative;
+  width: var(--ld-size);
+  height: var(--ld-size);
+  perspective: 650px;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+.sop-foundation.sop-motion-loader .ct-loader-body i {
+  display: block;
+  font-style: normal;
+  box-sizing: border-box;
+}
+.sop-foundation.sop-motion-loader .ct-loader-status {
+  display: block;
+  font-size: 11px;
+  line-height: 1.8;
+  letter-spacing: 0.06em;
+  margin: 8px 0 0;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+.sop-foundation.sop-motion-loader .ct-loader-body > svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  fill: none;
+}
+.sop-foundation.sop-motion-loader .ct-loader-body * {
+  animation-play-state: running;
+}
+.sop-foundation.sop-motion-loader[data-motion-running='false'] .ct-loader-body *,
+.sop-foundation.sop-motion-loader[data-paused='true'] .ct-loader-body * {
+  animation-play-state: paused !important;
+}
+.sop-motion-loader .ld-helix {
+  position: absolute;
+  inset: 4% 18%;
+}
+.sop-motion-loader .ld-pair {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--i) * 7%);
+  height: 4px;
+  width: 1px;
+}
+.sop-motion-loader .ld-pair::before,
+.sop-motion-loader .ld-pair::after {
+  content: '';
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  left: -3px;
+  border-radius: 50%;
+  background: var(--ld-accent);
+  box-shadow: 0 0 5px #c8e4e320;
+  animation: ld-helix 2.8s ease-in-out infinite;
+  animation-delay: calc(var(--i) * -0.1s);
+}
+.sop-motion-loader .ld-pair::after {
+  background: var(--ld-secondary);
+  animation-delay: calc(var(--i) * -0.1s - 1.4s);
+}
+@keyframes ld-helix {
+  0%,
+  100% {
+    transform: translateX(-26px) scale(0.75);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateX(26px) scale(1.1);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sop-motion-loader .ld-pair::before,
+  .sop-motion-loader .ld-pair::after {
+    animation: none !important;
+  }
+  .sop-motion-loader .ld-pair::before {
+    transform: translateX(-18px);
+  }
+  .sop-motion-loader .ld-pair::after {
+    transform: translateX(18px);
+  }
+}
+@media (forced-colors: active) {
+  .sop-foundation.sop-motion-loader {
+    --ld-accent: CanvasText;
+    --ld-secondary: Highlight;
+  }
+}
+.sop-motion-loader[data-motion-running='false'] .ld-pair::before,
+.sop-motion-loader[data-motion-running='false'] .ld-pair::after,
+.sop-motion-loader[data-paused='true'] .ld-pair::before,
+.sop-motion-loader[data-paused='true'] .ld-pair::after {
+  animation-play-state: paused !important;
+}

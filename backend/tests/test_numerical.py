@@ -4,6 +4,7 @@ import threading
 import numpy as np
 import pytest
 import torch
+
 from transformer_observatory.analysis import fit_projection, project_trace, transform
 from transformer_observatory.capture import Capture
 from transformer_observatory.models import TinyModel

@@ -13,8 +13,9 @@ import {
   SlidersHorizontal,
   X,
 } from 'lucide-react';
-import { api, connect, type Job, type Model } from './api';
+import { api, connect, prepareRuntime, type Job, type Model } from './api';
 import Explorer from './Explorer';
+import { AnalysisPreparing, RuntimeFailure } from './RuntimeLoading';
 import ResearchDesk from './ResearchDesk';
 import { Library, ModelManager, NewAnalysis, Settings } from './Pages';
 
@@ -28,8 +29,15 @@ export default function App() {
   const [selectedModelId, setSelectedModelId] = useState('');
   const [error, setError] = useState('');
   const [job, setJob] = useState<Job | null>(null);
+  const [clock, setClock] = useState(Date.now());
   const [traceId, setTraceId] = useState('');
   const [draft, setDraft] = useState<Record<string, any>>();
+  useEffect(() => {
+    if (!job || terminal.includes(job.state)) return;
+    setClock(Date.now());
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [job?.id, job?.state]);
   const reload = useCallback(async () => {
     const next = await api<Model[]>('models');
     setModels(next);
@@ -82,6 +90,19 @@ export default function App() {
       active = false;
     };
   }, [reload]);
+  useEffect(() => {
+    if (!ready) return;
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => {
+        prepareRuntime().catch(() => {});
+      });
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+    };
+  }, [ready]);
   function open(id: string) {
     setTraceId(id);
     setNav('explorer');
@@ -95,6 +116,7 @@ export default function App() {
       setJob(next);
       if (terminal.includes(next.state)) {
         event.close();
+        if (next.state === 'failed') prepareRuntime().catch(() => {});
         reload().catch((e) => setError(String(e)));
       }
     };
@@ -181,6 +203,7 @@ export default function App() {
             LOCAL SESSION
           </div>
         </header>
+        <RuntimeFailure />
         {error && (
           <div className="error-banner" role="alert">
             <span>{error}</span>
@@ -249,18 +272,22 @@ export default function App() {
             {nav === 'progress' && job && (
               <div className="progress-page">
                 <div className="eyebrow">OBSERVING THE TRANSFORMER</div>
-                <div
-                  className={`progress-ring ${terminal.includes(job.state) ? 'settled' : ''}`}
-                  style={{ '--progress': `${job.percent * 3.6}deg` } as React.CSSProperties}
-                >
-                  <div>
-                    <span className="progress-percent">
-                      {job.state === 'completed' ? <Check size={48} /> : Math.floor(job.percent)}
-                      {job.state !== 'completed' && <small>%</small>}
-                    </span>
-                    <span className="eyebrow">{job.state === 'completed' ? 'COMPLETE' : 'ESTIMATED'}</span>
+                {job.state === 'loading_runtime' ? (
+                  <AnalysisPreparing />
+                ) : (
+                  <div
+                    className={`progress-ring ${terminal.includes(job.state) ? 'settled' : ''}`}
+                    style={{ '--progress': `${job.percent * 3.6}deg` } as React.CSSProperties}
+                  >
+                    <div>
+                      <span className="progress-percent">
+                        {job.state === 'completed' ? <Check size={48} /> : Math.floor(job.percent)}
+                        {job.state !== 'completed' && <small>%</small>}
+                      </span>
+                      <span className="eyebrow">{job.state === 'completed' ? 'COMPLETE' : 'ESTIMATED'}</span>
+                    </div>
                   </div>
-                </div>
+                )}
                 <h1>
                   {job.state === 'completed'
                     ? '観測の準備ができました。'
@@ -268,11 +295,19 @@ export default function App() {
                       ? '解析を完了できませんでした。'
                       : job.state === 'cancelled'
                         ? '解析を中止しました。'
-                        : 'ことばの変化を、記録しています。'}
+                        : job.state === 'loading_runtime'
+                          ? '解析の準備をしています。'
+                          : 'ことばの変化を、記録しています。'}
                 </h1>
                 <p className="progress-detail" aria-live="polite">
                   {job.error || job.detail}
                 </p>
+                {job.created_at && (
+                  <p className="subtle-note">
+                    経過 {Math.max(0, Math.floor(job.elapsed_seconds ?? clock / 1000 - job.created_at))} 秒 ·
+                    準備待ちを含む
+                  </p>
+                )}
                 <div className="progress-stages">
                   {stages.map((s, i) => (
                     <div

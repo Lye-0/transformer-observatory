@@ -15,13 +15,9 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
-from .analysis import compare
 from .folders import open_folder
-from .jobs import Jobs
-from .lenses import register_lens
 from .model_discovery import ModelDiscovery, browse_folders, inspect_model, local_path, path_key, search_roots
-from .models import register_model
-from .research import Research, report_csv
+from .research_export import report_csv
 from .runtime import InstanceLock
 from .schema import (
     TERMINAL,
@@ -36,6 +32,7 @@ from .schema import (
 )
 from .storage import SCHEMA_VERSION, Store, atomic_json, default_data_root, digest
 from .trace_validation import validate_finite, validate_manifest
+from .worker import RemoteJobs, RemoteResearch, RuntimeManager, RuntimeUnavailable
 
 
 def create_app(store=None, testing=False):
@@ -45,8 +42,17 @@ def create_app(store=None, testing=False):
     guard = None if testing else InstanceLock(directory)
     try:
         store = store or Store()
-        jobs = Jobs(store)
-        research = Research(store, jobs)
+        runtime = RuntimeManager(store)
+        if testing:
+            # Legacy in-process numerical tests retain direct access to the executor.
+            from .jobs import Jobs
+            from .research import Research
+
+            jobs = Jobs(store)
+            research = Research(store, jobs)
+        else:
+            jobs = RemoteJobs(store, runtime)
+            research = RemoteResearch(store, runtime)
     except Exception:
         if guard:
             guard.close()
@@ -68,11 +74,13 @@ def create_app(store=None, testing=False):
             task.cancel()
             discovery.close()
             jobs.close()
+            runtime.close()
             if guard:
                 guard.close()
 
     app = FastAPI(title="Transformer Observatory", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.store, app.state.jobs = store, jobs
+    app.state.runtime = runtime
     app.state.discovery = discovery
     app.state.research = research
 
@@ -103,6 +111,25 @@ def create_app(store=None, testing=False):
         if request.url.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
         return response
+
+    @app.exception_handler(RuntimeUnavailable)
+    async def runtime_error(request, exc):
+        return JSONResponse({"detail": str(exc)}, status_code=503)
+
+    @app.get("/api/runtime")
+    def runtime_status():
+        return runtime.status()
+
+    @app.post("/api/runtime/start")
+    def runtime_start(body: dict | None = None):
+        return runtime.start(retry=bool(body and body.get("retry")))
+
+    def register_model(path, name):
+        if testing:
+            from .models import register_model as register
+
+            return register(path, name)
+        return runtime.call("register_model", path, name)
 
     @app.exception_handler(ValueError)
     async def value_error(request, exc):
@@ -258,7 +285,11 @@ def create_app(store=None, testing=False):
 
     @app.post("/api/traces/compare")
     def comparison(body: ComparisonRequest):
-        return compare(store, body.left, body.right)
+        if testing:
+            from .analysis import compare
+
+            return compare(store, body.left, body.right)
+        return runtime.call("compare", body.left, body.right)
 
     @app.get("/api/traces/{trace_id}")
     def trace(trace_id: str):
@@ -371,7 +402,11 @@ def create_app(store=None, testing=False):
 
     @app.post("/api/research/lenses/register")
     def add_lens(body: LensRegistration):
-        return register_lens(store, jobs.model(body.model_id), body.path, body.name)
+        if testing:
+            from .lenses import register_lens
+
+            return register_lens(store, jobs.model(body.model_id), body.path, body.name)
+        return runtime.call("register_lens", body.model_id, body.path, body.name)
 
     @app.get("/api/traces/{trace_id}/tensor")
     def tensor(

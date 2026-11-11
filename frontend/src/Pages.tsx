@@ -1,3 +1,4 @@
+import { RuntimeLoading } from './RuntimeLoading';
 import { useEffect, useState } from 'react';
 import {
   ArrowRight,
@@ -118,9 +119,11 @@ export function NewAnalysis({
   async function check(start: boolean) {
     setBusy(true);
     try {
-      const result = await api('analysis/preflight', 'POST', payload());
-      setPf(result);
-      if (start) onJob(await api<Job>('analysis/jobs', 'POST', payload()));
+      if (start) {
+        onJob(await api<Job>('analysis/jobs', 'POST', payload()));
+      } else {
+        setPf(await api('analysis/preflight', 'POST', payload()));
+      }
     } catch (e) {
       onError(String(e));
     } finally {
@@ -385,13 +388,18 @@ export function NewAnalysis({
                 <ShieldCheck size={17} /> 実行前チェック
               </span>
             </div>
-            <div className="preflight-orbit">
-              <div />
-              <div />
-              <span>∴</span>
-            </div>
-            <h3>{pf ? '解析の準備ができています' : '実測のための準備'}</h3>
-            <p className="muted">Tokenizer・取得範囲・利用可能なリソースを確認してから実行します。</p>
+            <RuntimeLoading scope="analysis" />
+            {!busy && (
+              <>
+                <div className="preflight-orbit">
+                  <div />
+                  <div />
+                  <span>∴</span>
+                </div>
+                <h3>{pf ? '解析の準備ができています' : '実測のための準備'}</h3>
+                <p className="muted">Tokenizer・取得範囲・利用可能なリソースを確認してから実行します。</p>
+              </>
+            )}
             <dl className="resource-list">
               <div>
                 <dt>

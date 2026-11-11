@@ -68,7 +68,7 @@ def default_trace_root():
 
 
 class Store:
-    def __init__(self, data_root=None, trace_root=None):
+    def __init__(self, data_root=None, trace_root=None, *, recover=True):
         self.data_root = Path(data_root or os.environ.get("OBSERVATORY_DATA_DIR") or default_data_root())
         self.trace_root = Path(trace_root or os.environ.get("OBSERVATORY_TRACE_DIR") or default_trace_root())
         self.data_root.mkdir(parents=True, exist_ok=True)
@@ -97,20 +97,23 @@ class Store:
         configured = self.settings.get("trace_root")
         if configured and not trace_root and not os.environ.get("OBSERVATORY_TRACE_DIR"):
             self.trace_root = self.validate_root(configured)
-        # A restarted process cannot claim a vanished worker is still running.
-        for job in self.list("jobs"):
-            if job["state"] not in {"completed", "cancelled", "failed"}:
-                job.update(state="failed", error="バックエンドが中断されました。部分トレースを確認できます。")
-                self.put("jobs", job["id"], job)
-                self.mark_incomplete(job["id"], job["error"])
-        for study in self.list("studies"):
-            if study["state"] not in {"completed", "cancelled", "failed"}:
-                study.update(
-                    state="failed",
-                    error="バックエンドが中断されました。確定済み研究レポートは維持されています。",
-                )
-                self.put("studies", study["id"], study)
-        self.auto_cleanup()
+        if recover:
+            # A restarted process cannot claim a vanished worker is still running.
+            for job in self.list("jobs"):
+                if job["state"] not in {"completed", "cancelled", "failed"}:
+                    job.update(
+                        state="failed", error="バックエンドが中断されました。部分トレースを確認できます。"
+                    )
+                    self.put("jobs", job["id"], job)
+                    self.mark_incomplete(job["id"], job["error"])
+            for study in self.list("studies"):
+                if study["state"] not in {"completed", "cancelled", "failed"}:
+                    study.update(
+                        state="failed",
+                        error="バックエンドが中断されました。確定済み研究レポートは維持されています。",
+                    )
+                    self.put("studies", study["id"], study)
+            self.auto_cleanup()
 
     @contextmanager
     def db(self):

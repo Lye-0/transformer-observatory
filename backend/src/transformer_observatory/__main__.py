@@ -2,6 +2,7 @@ import argparse
 import socket
 import threading
 import webbrowser
+from pathlib import Path
 
 from .startup import startup_progress
 
@@ -25,9 +26,12 @@ def main():
             progress("Loading server libraries")
             import uvicorn
 
-            progress("Loading analysis libraries and preparing application")
+            progress("Preparing lightweight application")
             app = create_app()
-            progress("Application prepared; starting HTTP server")
+            if args.startup_log and getattr(app.state, "runtime", None):
+                log_path = Path(args.startup_log)
+                app.state.runtime.startup_log = str(log_path.with_stem(log_path.stem + "-runtime"))
+            progress("Application prepared; starting HTTP server (analysis engine loads after UI opens)")
     except RuntimeError as exc:
         parser.exit(1, f"{exc}\n")
     # Bind once and pass the same socket to uvicorn, avoiding a free-port race.
