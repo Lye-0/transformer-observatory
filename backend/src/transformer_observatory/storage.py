@@ -140,6 +140,7 @@ class Store:
         self._connections = threading.local()
         self.previews = {}
         self.roots = {}
+        self.importing = set()
         with self.db() as db:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS traces (id TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -259,10 +260,19 @@ class Store:
                 raise ValueError("トレース所有マーカーが一致しません")
         return path
 
-    def create(self, trace_id, manifest):
+    def create(self, trace_id, manifest, *, storage_root=None):
         with self.lock:
-            path = self.path(trace_id, require_owner=False)
-            path.mkdir(exist_ok=False)
+            if storage_root is not None:
+                if not TRACE_ID.fullmatch(trace_id) or self.get("traces", trace_id) is not None:
+                    raise ValueError("新規トレースのIDが不正または使用済みです")
+                self.roots[trace_id] = self.validate_root(str(storage_root))
+            try:
+                path = self.path(trace_id, require_owner=False)
+                path.mkdir(exist_ok=False)
+            except Exception:
+                if storage_root is not None:
+                    self.roots.pop(trace_id, None)
+                raise
             (path / ".trace-owner").write_text(trace_id)
             manifest.update(
                 id=trace_id,
@@ -272,11 +282,11 @@ class Store:
                 created_at=time.time(),
                 tensors=[],
                 stages=[],
-                storage_root=str(self.trace_root),
+                storage_root=str(path.parent),
             )
             atomic_json(path / "manifest.json", manifest)
             self.put("traces", trace_id, manifest)
-            self.roots[trace_id] = self.trace_root
+            self.roots[trace_id] = path.parent
             return path
 
     @staticmethod
@@ -386,6 +396,8 @@ class Store:
         return array
 
     def trace_busy(self, trace_id):
+        if trace_id in self.importing:
+            return True
         terminal = {"completed", "cancelled", "failed"}
         job = self.get("jobs", trace_id)
         return bool(job and job["state"] not in terminal) or any(

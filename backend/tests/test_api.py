@@ -1,7 +1,9 @@
 import io
 import json
+import threading
 import time
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pytest
@@ -171,6 +173,51 @@ def test_unavailable_retained_entry_can_be_forgotten_without_deleting_files(clie
     assert response.status_code == 200, response.text
     assert (root / "manifest.json").exists()
     assert (root / ".trace-owner").read_text() == "wrong"
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_import_does_not_block_http_and_partial_import_cannot_be_deleted(client, monkeypatch, fail):
+    from transformer_observatory import api as api_module
+
+    source = run_job(client, level=2)
+    archive = client.get(f"/api/traces/{source}/export").content
+    entered, release = threading.Event(), threading.Event()
+    original = api_module.validate_finite
+
+    def pause(array):
+        if not entered.is_set():
+            entered.set()
+            assert release.wait(10)
+            if fail:
+                raise ValueError("injected import validation failure")
+        return original(array)
+
+    monkeypatch.setattr(api_module, "validate_finite", pause)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        upload = pool.submit(client.post, "/api/storage/import", content=archive, headers={"Content-Type":"application/zip"})
+        try:
+            assert entered.wait(5)
+            started = time.monotonic()
+            for path in ("/api/session", "/api/runtime", "/api/traces"):
+                assert client.get(path).status_code == 200
+            assert time.monotonic() - started < 2
+            imported = next(t for t in client.get("/api/traces").json() if t["id"] != source)
+            assert imported["active"]
+            trace_id = imported["id"]
+            assert client.delete(f"/api/traces/{trace_id}", headers={"x-confirm-trace":trace_id}).status_code == 400
+            assert client.post(f"/api/traces/{trace_id}/retain").status_code == 400
+        finally:
+            release.set()
+        response = upload.result(timeout=15)
+    if fail:
+        assert response.status_code == 400, response.text
+        assert client.app.state.store.manifest(trace_id)["status"] == "incomplete"
+        assert not client.app.state.store.trace_busy(trace_id)
+    else:
+        assert response.status_code == 200, response.text
+        trace_id = response.json()["id"]
+        assert client.get(f"/api/traces/{trace_id}/verify").json()["verified"]
+    assert not client.app.state.store.importing
 
 
 def test_full_job_reconnect_export_import_and_comparison(client):

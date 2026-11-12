@@ -1,7 +1,9 @@
 """Persistent inference process. Importing this module must remain lightweight."""
 
+import logging
 import multiprocessing
 import signal
+import sqlite3
 import threading
 import time
 import uuid
@@ -11,6 +13,8 @@ from pathlib import Path
 from .catalog import ModelCatalog
 from .schema import TERMINAL
 from .startup import startup_progress
+
+logger = logging.getLogger(__name__)
 
 
 class RuntimeUnavailable(RuntimeError):
@@ -115,6 +119,11 @@ class RuntimeManager:
         self.pending = {}
         self.closed = False
         self.started_at = self.ready_at = None
+        self.recovery_done = threading.Event()
+        self.recovery_done.set()
+        self.recovery_stop = threading.Event()
+        self.recovery_thread = None
+        self.recovery_error = None
 
     def status(self):
         with self.lock:
@@ -124,14 +133,20 @@ class RuntimeManager:
                 started_at=self.started_at,
                 ready_at=self.ready_at,
                 pid=self.process.pid if self.process else None,
+                recovery_pending=not self.recovery_done.is_set(),
+                recovery_error=self.recovery_error,
             )
 
     def start(self, retry=False):
+        if retry and not self.recovery_done.wait(timeout=10):
+            raise RuntimeUnavailable("中断したジョブの状態を回復中です。少し待って再試行してください")
         with self.lock:
             if self.closed:
                 raise RuntimeUnavailable("解析エンジンは終了しました")
             if self.state in {"starting", "ready"} or (self.state == "failed" and not retry):
                 return self.status()
+            if not self.recovery_done.is_set():
+                raise RuntimeUnavailable("中断したジョブの状態を回復中です")
             self.state, self.error = "starting", None
             self.started_at, self.ready_at = time.time(), None
             self.changed.clear()
@@ -165,21 +180,63 @@ class RuntimeManager:
 
     def _fail(self, error):
         with self.lock:
+            if self.closed:
+                return
             self.state, self.error = "failed", error
             self.changed.set()
             for future in self.pending.values():
                 future.set_exception(RuntimeUnavailable(error))
             self.pending.clear()
-            # A crashed process cannot finish its persisted jobs.
-            for table in ("jobs", "studies"):
-                for item in self.store.list(table):
-                    if item["state"] not in TERMINAL:
-                        item.update(state="failed", error=error, updated_at=time.time())
-                        if table == "jobs" and item.get("created_at"):
-                            item["elapsed_seconds"] = item["updated_at"] - item["created_at"]
-                        self.store.put(table, item["id"], item)
-                        if table == "jobs":
-                            self.store.mark_incomplete(item["id"], error)
+            if not self.recovery_done.is_set():
+                return
+            self.recovery_done.clear()
+            self.recovery_error = None
+            self.recovery_thread = threading.Thread(
+                target=self._recover, args=(self.process, error), name="runtime-recovery", daemon=True
+            )
+            self.recovery_thread.start()
+
+    def _recover(self, process, error):
+        # The pipe may close before Windows has released the worker's WAL handles.
+        # Do not let a transient DB error kill the only job-reconciliation path.
+        pending_traces = set()
+        attempt = 0
+        worker_stopped = False
+        while not self.recovery_stop.is_set():
+            try:
+                if not worker_stopped and process and process.pid:
+                    process.join(timeout=5)
+                    if self.recovery_stop.is_set():
+                        return
+                    if process.is_alive():
+                        process.terminate()
+                        process.join(timeout=2)
+                    if process.is_alive():
+                        raise OSError("解析ワーカーの終了を待機中です")
+                worker_stopped = True
+                for table in ("jobs", "studies"):
+                    for item in self.store.list(table):
+                        if item["state"] not in TERMINAL:
+                            item.update(state="failed", error=error, updated_at=time.time())
+                            if table == "jobs" and item.get("created_at"):
+                                item["elapsed_seconds"] = item["updated_at"] - item["created_at"]
+                            self.store.put(table, item["id"], item)
+                            if table == "jobs":
+                                pending_traces.add(item["id"])
+                for trace_id in tuple(pending_traces):
+                    self.store.mark_incomplete(trace_id, error)
+                    pending_traces.remove(trace_id)
+                with self.lock:
+                    self.recovery_error = None
+                    self.recovery_done.set()
+                return
+            except (sqlite3.Error, OSError) as exc:
+                with self.lock:
+                    self.recovery_error = str(exc)
+                attempt += 1
+                if attempt & (attempt - 1) == 0:
+                    logger.warning("Retrying interrupted job recovery (%s)", exc)
+                self.recovery_stop.wait(min(1, .05 * 2 ** min(attempt, 5)))
 
     def _receive(self, connection, process):
         try:
@@ -245,6 +302,8 @@ class RuntimeManager:
     def close(self):
         with self.lock:
             self.closed = True
+            self.recovery_stop.set()
+            self.recovery_done.set()
             self.changed.set()
             for future in self.pending.values():
                 future.set_exception(RuntimeUnavailable("解析エンジンは終了しました"))
@@ -260,6 +319,8 @@ class RuntimeManager:
             if process.is_alive():
                 process.terminate()
                 process.join(timeout=2)
+        if self.recovery_thread:
+            self.recovery_thread.join(timeout=2)
 
 
 class RemoteJobs(ModelCatalog):

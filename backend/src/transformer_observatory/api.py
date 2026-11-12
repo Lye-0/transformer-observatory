@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 
 from .folders import open_folder
 from .model_discovery import ModelDiscovery, browse_folders, inspect_model, local_path, path_key, search_roots
@@ -268,6 +269,7 @@ def create_app(store=None, testing=False):
                 recorded_status=m["status"],
                 model=m["model"]["name"],
                 model_fingerprint=m["model"]["fingerprint"],
+                stages=m.get("stages", []),
                 created_at=m["created_at"],
                 retained=m["retained"],
                 size_bytes=m.get("size_bytes", 0),
@@ -537,71 +539,80 @@ def create_app(store=None, testing=False):
 
     @app.post("/api/storage/import")
     async def import_trace(request: Request):
-        limit = int(store.settings["trace_limit_gib"] * 2**30)
-        # Spool upload to disk instead of loading the entire archive into RAM.
+        limit = await run_in_threadpool(lambda: int(store.settings["trace_limit_gib"] * 2**30))
+        # Keep the spool alive until shielded threadpool work finishes, including on disconnect.
         with tempfile.TemporaryFile() as uploaded:
             size = 0
             async for chunk in request.stream():
                 size += len(chunk)
                 if size > limit:
                     raise ValueError("インポート上限を超えました")
-                uploaded.write(chunk)
-            uploaded.seek(0)
-            try:
-                with zipfile.ZipFile(uploaded) as archive:
-                    entries = archive.infolist()
-                    if sum(i.file_size for i in entries) > limit or len(entries) > 200000:
-                        raise ValueError("展開後の容量・ファイル数が上限を超えます")
-                    if len(set(i.filename for i in entries)) != len(entries):
-                        raise ValueError("重複したアーカイブパス")
-                    if archive.getinfo("manifest.json").file_size > 32 * 2**20:
-                        raise ValueError("manifestが大きすぎます")
-                    m = json.loads(archive.read("manifest.json"))
-                    if m.get("schema_version") != SCHEMA_VERSION or m.get("status") != "completed":
-                        raise ValueError("未対応形式または未完了トレース")
-                    if not all(
-                        key in m for key in ["id", "stages", "tensors", "tokens", "model", "level", "title"]
+                await run_in_threadpool(uploaded.write, chunk)
+            return await run_in_threadpool(import_archive, uploaded, limit)
+
+    def import_archive(uploaded, limit):
+        uploaded.seek(0)
+        try:
+            with zipfile.ZipFile(uploaded) as archive:
+                entries = archive.infolist()
+                if sum(i.file_size for i in entries) > limit or len(entries) > 200000:
+                    raise ValueError("展開後の容量・ファイル数が上限を超えます")
+                if len(set(i.filename for i in entries)) != len(entries):
+                    raise ValueError("重複したアーカイブパス")
+                if archive.getinfo("manifest.json").file_size > 32 * 2**20:
+                    raise ValueError("manifestが大きすぎます")
+                m = json.loads(archive.read("manifest.json"))
+                if m.get("schema_version") != SCHEMA_VERSION or m.get("status") != "completed":
+                    raise ValueError("未対応形式または未完了トレース")
+                if not all(
+                    key in m for key in ["id", "stages", "tensors", "tokens", "model", "level", "title"]
+                ):
+                    raise ValueError("必須のmanifest項目がありません")
+                validate_manifest(m)
+                source_id, trace_id = m["id"], uuid.uuid4().hex
+                allowed = {"manifest.json", "integrity.json"} | {r["file"] for r in m["tensors"]}
+                for i in entries:
+                    p = Path(i.filename)
+                    if (
+                        i.filename not in allowed
+                        or p.is_absolute()
+                        or ".." in p.parts
+                        or "\\" in i.filename
+                        or ":" in i.filename
+                        or i.is_dir()
                     ):
-                        raise ValueError("必須のmanifest項目がありません")
-                    validate_manifest(m)
-                    source_id, trace_id = m["id"], uuid.uuid4().hex
-                    allowed = {"manifest.json", "integrity.json"} | {r["file"] for r in m["tensors"]}
-                    for i in entries:
-                        p = Path(i.filename)
-                        if (
-                            i.filename not in allowed
-                            or p.is_absolute()
-                            or ".." in p.parts
-                            or "\\" in i.filename
-                            or ":" in i.filename
-                            or i.is_dir()
-                        ):
-                            raise ValueError("不正なアーカイブパス")
-                    stages, tensors = m["stages"], m["tensors"]
-                    # create() initializes a journal; restore validated imported definitions afterwards.
-                    root = store.create(trace_id, m)
+                        raise ValueError("不正なアーカイブパス")
+                stages, tensors = m["stages"], m["tensors"]
+                # create() initializes a journal; restore validated imported definitions afterwards.
+                try:
+                    with store.lock:
+                        store.importing.add(trace_id)
+                        root = store.create(trace_id, m, storage_root=store.data_root / "retained/traces")
                     m.update(stages=stages, tensors=tensors, source_id=source_id)
-                    try:
-                        for r in tensors:
-                            p = store.tensor_path(trace_id, r)
-                            p.parent.mkdir(parents=True, exist_ok=True)
-                            with archive.open(r["file"]) as src, p.open("wb") as dst:
-                                __import__("shutil").copyfileobj(src, dst, 1024 * 1024)
-                            if digest(p) != r["sha256"]:
-                                raise ValueError("インポートのハッシュが一致しません")
-                            validate_finite(store.load(trace_id, r))
-                        m.update(status="completed", retained=False)
-                        store.save_manifest(m)
-                        atomic_json(root / "integrity.json", m.get("integrity", {}))
-                        store.retain(trace_id, True)
-                    except Exception:
-                        store.mark_incomplete(trace_id, "インポート検証に失敗")
-                        raise
-                    return dict(id=trace_id)
-            except zipfile.BadZipFile as exc:
-                raise ValueError("有効なZIPファイルを指定してください") from exc
-            except (KeyError, IndexError, TypeError, UnicodeDecodeError) as exc:
-                raise ValueError("トレースの必須項目またはアーカイブ構造が不正です") from exc
+                    for r in tensors:
+                        p = store.tensor_path(trace_id, r)
+                        p.parent.mkdir(parents=True, exist_ok=True)
+                        with archive.open(r["file"]) as src, p.open("wb") as dst:
+                            __import__("shutil").copyfileobj(src, dst, 1024 * 1024)
+                        if digest(p) != r["sha256"]:
+                            raise ValueError("インポートのハッシュが一致しません")
+                        validate_finite(store.load(trace_id, r))
+                    # Imported data is already in its final owned permanent directory.
+                    # Avoid a second copy/hash pass under the global retention lock.
+                    m.update(status="completed", retained=True)
+                    store.save_manifest(m)
+                    atomic_json(root / "integrity.json", m.get("integrity", {}))
+                except Exception:
+                    store.mark_incomplete(trace_id, "インポート検証に失敗")
+                    raise
+                finally:
+                    with store.lock:
+                        store.importing.discard(trace_id)
+                return dict(id=trace_id)
+        except zipfile.BadZipFile as exc:
+            raise ValueError("有効なZIPファイルを指定してください") from exc
+        except (KeyError, IndexError, TypeError, UnicodeDecodeError) as exc:
+            raise ValueError("トレースの必須項目またはアーカイブ構造が不正です") from exc
 
     frontend = Path(__file__).resolve().parents[3] / "frontend/dist"
     if frontend.is_dir():

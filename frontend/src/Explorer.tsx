@@ -23,6 +23,7 @@ import FloatingPanel from './FloatingPanel';
 import Heatmap, { HeatmapDetail } from './Heatmap';
 import { colorLimit, type TensorValue } from './heatmapMath';
 import { tokenLabel, tokenTitle } from './tokenText';
+import { canCompare } from './comparisonCandidates';
 
 type PinnedValue = {
   id: string;
@@ -83,13 +84,19 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
   const [rightMetrics, setRightMetrics] = useState<Float32Array>();
   const [compareMode, setCompareMode] = useState('overlay');
   const [comparing, setComparing] = useState(false);
+  const comparisonRequest = useRef(0);
+  const compareCandidates = m ? traces.filter((trace) => canCompare(m, trace)) : [];
   const [verified, setVerified] = useState<boolean | null>(null);
   const cameraBus = useRef<{ position: number[]; target: number[]; source?: string } | null>(null);
 
   useEffect(() => {
     let active = true;
     setM(null);
+    comparisonRequest.current += 1;
+    setCompareId('');
     setComparison(null);
+    setRightMetrics(undefined);
+    setComparing(false);
     setData(null);
     setPins([]);
     setPinsOpen(false);
@@ -107,7 +114,9 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
       })
       .catch((e) => onError(String(e)));
     api<any[]>('traces')
-      .then(setTraces)
+      .then((items) => {
+        if (active) setTraces(items);
+      })
       .catch((e) => onError(String(e)));
     fetch(`/api/traces/${id}/metric-values`)
       .then((r) => (r.ok ? r.arrayBuffer() : undefined))
@@ -116,6 +125,7 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
       });
     return () => {
       active = false;
+      comparisonRequest.current += 1;
     };
   }, [id]);
   useEffect(() => {
@@ -216,15 +226,26 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
     );
   }
   async function compare() {
+    const request = ++comparisonRequest.current;
     setComparing(true);
+    setComparison(null);
+    setRightMetrics(undefined);
     try {
-      setComparison(await api('traces/compare', 'POST', { left: id, right: compareId }));
-      const response = await fetch(`/api/traces/${compareId}/metric-values`);
-      setRightMetrics(response.ok ? new Float32Array(await response.arrayBuffer()) : undefined);
+      const [result, values] = await Promise.all([
+        api('traces/compare', 'POST', { left: id, right: compareId }),
+        (async () => {
+          const response = await fetch(`/api/traces/${compareId}/metric-values`);
+          if (!response.ok) throw new Error('比較先の指標を読み取れませんでした');
+          return new Float32Array(await response.arrayBuffer());
+        })(),
+      ]);
+      if (request !== comparisonRequest.current) return;
+      setComparison(result);
+      setRightMetrics(values);
     } catch (e) {
-      onError(String(e));
+      if (request === comparisonRequest.current) onError(String(e));
     } finally {
-      setComparing(false);
+      if (request === comparisonRequest.current) setComparing(false);
     }
   }
   if (!m || !data) return <div className="empty-state">保存された観測データを読み込み中…</div>;
@@ -768,19 +789,28 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
             <Select
               aria-label="比較する実験"
               value={compareId}
-              onChange={(e) => setCompareId(e.target.value)}
+              onChange={(e) => {
+                comparisonRequest.current += 1;
+                setCompareId(e.target.value);
+                setComparison(null);
+                setRightMetrics(undefined);
+                setComparing(false);
+              }}
             >
               <option value="">比較する実験を選択</option>
-              {traces
-                .filter((t) => t.id !== id && t.status === 'completed')
-                .map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.title}
-                  </option>
-                ))}
+              {compareCandidates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title} · {t.model} · {new Date(t.created_at * 1000).toLocaleString('ja-JP')} · #
+                  {t.id.slice(0, 8)}
+                </option>
+              ))}
             </Select>
             <RuntimeLoading scope="compare" />
-            <button className="secondary" disabled={!compareId || comparing} onClick={compare}>
+            <button
+              className="secondary"
+              disabled={!compareCandidates.some((t) => t.id === compareId) || comparing}
+              onClick={compare}
+            >
               {comparing ? '共通PCAを計算中…' : '比較する'}
             </button>
             {comparison && (
@@ -794,7 +824,14 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
                   <option value="side">Side by Side</option>
                   <option value="difference">Difference Analysis</option>
                 </Select>
-                <button className="text-button" onClick={() => setComparison(null)}>
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    comparisonRequest.current += 1;
+                    setComparison(null);
+                    setRightMetrics(undefined);
+                  }}
+                >
                   比較を閉じる
                 </button>
               </>
@@ -802,6 +839,11 @@ export default function Explorer({ id, onError, onReanalyze }: Props) {
           </div>
           {comparison && (
             <>
+              <p className="subtle-note">
+                比較結果：左「{m.title}」 #{comparison.left.slice(0, 8)} ／ 右「
+                {traces.find((t) => t.id === comparison.right)?.title || comparison.right}」 #
+                {comparison.right.slice(0, 8)}
+              </p>
               <p className="subtle-note">
                 両実験のResidualから共通PCAを計算しました。左＝トークン色、右＝金色（Overlay）。共通接頭辞{' '}
                 {comparison.common_prefix_tokens} tokens · 高次元差の最大{' '}

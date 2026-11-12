@@ -1,5 +1,6 @@
 """Exercise the production process boundary, alongside the in-process numerical suite."""
 
+import sqlite3
 import subprocess
 import sys
 import time
@@ -149,3 +150,65 @@ def test_worker_attach_does_not_recover_live_jobs(tmp_path):
     store.put("jobs", "pending", dict(id="pending", state="loading_runtime"))
     Store(store.data_root, store.trace_root, recover=False)
     assert store.get("jobs", "pending")["state"] == "loading_runtime"
+
+
+@pytest.mark.parametrize("operation", ["list", "put", "mark_incomplete"])
+def test_failure_recovery_retries_database_errors_without_losing_partial_data(tmp_path, monkeypatch, operation):
+    store = Store(tmp_path / "db", tmp_path / "traces")
+    trace_id = "a" * 32
+    root = store.create(trace_id, dict(title="partial", level=2))
+    (root / "partial.npy").write_bytes(b"keep partial data")
+    store.put("jobs", trace_id, dict(id=trace_id, state="capturing", created_at=time.time()))
+    store.put("studies", "study", dict(id="study", state="running", request=dict(trace_ids=[trace_id])))
+    original = getattr(store, operation)
+    attempts = []
+
+    def transient(*args, **kwargs):
+        attempts.append(args)
+        if len(attempts) <= 2:
+            raise sqlite3.OperationalError("disk I/O error")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(store, operation, transient)
+    runtime = RuntimeManager(store)
+    try:
+        runtime._fail("worker exited")
+        assert runtime.recovery_done.wait(5)
+        assert runtime.status()["state"] == "failed"
+        assert not runtime.status()["recovery_pending"]
+        assert runtime.status()["recovery_error"] is None
+        assert store.get("jobs", trace_id)["state"] == "failed"
+        assert store.get("jobs", trace_id)["elapsed_seconds"] >= 0
+        assert store.get("studies", "study")["state"] == "failed"
+        assert store.manifest(trace_id)["error"] == "worker exited"
+        assert (root / "partial.npy").read_bytes() == b"keep partial data"
+        assert len(attempts) >= 3
+    finally:
+        runtime.close()
+
+
+def test_persistent_recovery_error_stays_visible_and_shutdown_stops_retry(tmp_path, monkeypatch):
+    store = Store(tmp_path / "db", tmp_path / "traces")
+
+    def unavailable(*_):
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(store, "list", unavailable)
+    runtime = RuntimeManager(store)
+    runtime._fail("worker exited")
+    try:
+        deadline = time.monotonic() + 2
+        while runtime.status()["recovery_error"] is None and time.monotonic() < deadline:
+            time.sleep(.01)
+        assert runtime.status()["recovery_pending"]
+        assert runtime.status()["recovery_error"] == "disk I/O error"
+        assert not runtime.recovery_done.is_set()
+        assert runtime.process is None
+        with monkeypatch.context() as guard:
+            guard.setattr(runtime.recovery_done, "wait", lambda timeout: False)
+            with pytest.raises(RuntimeUnavailable, match="回復中"):
+                runtime.start(retry=True)
+        assert runtime.process is None
+    finally:
+        runtime.close()
+    assert not runtime.recovery_thread.is_alive()

@@ -1,5 +1,5 @@
 import { RuntimeLoading } from './RuntimeLoading';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
   Check,
@@ -18,6 +18,7 @@ import {
 import { api, bytes, upload, type Job, type Model } from './api';
 import Select from './Select';
 import { NumberField } from './NumberInput';
+import { tokenLabel, tokenTitle } from './tokenText';
 
 type Common = { onError: (message: string) => void };
 
@@ -53,6 +54,13 @@ export function NewAnalysis({
   const [topP, setTopP] = useState(1);
   const [projection, setProjection] = useState('auto');
   const [pf, setPf] = useState<any>(null);
+  const preflightRequest = useRef(0);
+  useEffect(
+    () => () => {
+      preflightRequest.current += 1;
+    },
+    [],
+  );
   const [busy, setBusy] = useState(false);
   const model = models.find((m) => m.id === modelId);
   useEffect(() => {
@@ -98,6 +106,7 @@ export function NewAnalysis({
     projection,
   });
   useEffect(() => {
+    preflightRequest.current += 1;
     setPf(null);
   }, [
     modelId,
@@ -117,15 +126,18 @@ export function NewAnalysis({
     projection,
   ]);
   async function check(start: boolean) {
+    const request = ++preflightRequest.current;
+    setPf(null);
     setBusy(true);
     try {
       if (start) {
         onJob(await api<Job>('analysis/jobs', 'POST', payload()));
       } else {
-        setPf(await api('analysis/preflight', 'POST', payload()));
+        const result = await api('analysis/preflight', 'POST', payload());
+        if (request === preflightRequest.current) setPf(result);
       }
     } catch (e) {
-      onError(String(e));
+      if (start || request === preflightRequest.current) onError(String(e));
     } finally {
       setBusy(false);
     }
@@ -473,9 +485,9 @@ export function NewAnalysis({
           </div>
           <div className="token-chips">
             {pf.tokens.map((t: any) => (
-              <span key={t.position} title={`Position ${t.position} / ID ${t.id}`}>
+              <span key={t.position} title={`Position ${t.position}\n${tokenTitle(t)}`}>
                 <small>{t.position}</small>
-                {t.raw}
+                {tokenLabel(t)}
               </span>
             ))}
           </div>

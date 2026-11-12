@@ -126,6 +126,20 @@ def test_invalid_manifest_does_not_replace_file_or_catalog(tmp_path):
     assert store.get("traces", writer.trace_id) == before
 
 
+def test_create_in_permanent_root_is_owned_and_cannot_replace_existing_trace(tmp_path):
+    store = Store(tmp_path / "data", tmp_path / "temporary")
+    manifest = dict(title="import", level=2)
+    trace_id = "e" * 32
+    permanent = store.data_root / "retained/traces"
+    path = store.create(trace_id, manifest, storage_root=permanent)
+    assert path.parent == permanent.resolve()
+    assert store.manifest(trace_id)["storage_root"] == str(permanent.resolve())
+    assert (path / ".trace-owner").read_text() == trace_id
+    with pytest.raises(ValueError, match="使用済み"):
+        store.create(trace_id, {}, storage_root=tmp_path / "other")
+    assert store.manifest(trace_id)["title"] == "import"
+
+
 def test_connection_session_commits_each_chunk_and_closes_on_failure(tmp_path):
     store, writer = make_trace(tmp_path)
     with pytest.raises(RuntimeError, match="injected"):
