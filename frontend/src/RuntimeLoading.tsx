@@ -54,7 +54,3 @@ export function RuntimeFailure() {
     </div>
   );
 }
-
-export function AnalysisPreparing() {
-  return <LoadingVisual className="analysis-preparing" content="解析エンジンを準備しています…" />;
-}

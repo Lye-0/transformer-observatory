@@ -57,7 +57,9 @@ FastAPIプロセスではTorch・Transformers・SciPy・scikit-learnをimportし
 
 解析開始時のTokenizer・容量・デバイス検証はジョブ内の最初の工程で行う。入力スキーマなどの軽い検証を通れば202で受付し、実行前チェックで不適合ならジョブを失敗として表示する。開始前に確認したい場合は従来の「トークン・容量を確認」を利用できる。
 
-Helix Threadは添付のSTATE OF PLAY v4.8.0をテーマに合わせて組み込み、二本の鎖の位相と形状を保つ。画面外・非表示タブ・`prefers-reduced-motion` では動きを止め、状態文は `role=status` で伝える。
+解析中画面は `loading_runtime` から解析完了まで同じ進捗リングを維持し、準備状態は見出しで伝える。準備中の重複した詳細文は表示せず、エラーは残す。経過時間は準備待ちを含めて継続する。
+
+それ以外の画面の準備待ちにはHelix Threadを使う。添付のSTATE OF PLAY v4.8.0をテーマに合わせて組み込み、二本の鎖の位相と形状を保つ。画面外・非表示タブ・`prefers-reduced-motion` では動きを止め、状態文は `role=status` で伝える。
 
 ## モデルの検出・登録
 

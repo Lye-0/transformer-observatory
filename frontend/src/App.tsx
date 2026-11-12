@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { api, connect, prepareRuntime, type Job, type Model } from './api';
 import Explorer from './Explorer';
-import { AnalysisPreparing, RuntimeFailure } from './RuntimeLoading';
+import { RuntimeFailure } from './RuntimeLoading';
 import ResearchDesk from './ResearchDesk';
 import { Library, ModelManager, NewAnalysis, Settings } from './Pages';
 
@@ -272,23 +272,19 @@ export default function App() {
             {nav === 'progress' && job && (
               <div className="progress-page">
                 <div className="eyebrow">OBSERVING THE TRANSFORMER</div>
-                {job.state === 'loading_runtime' ? (
-                  <AnalysisPreparing />
-                ) : (
-                  <div
-                    className={`progress-ring ${terminal.includes(job.state) ? 'settled' : ''}`}
-                    style={{ '--progress': `${job.percent * 3.6}deg` } as React.CSSProperties}
-                  >
-                    <div>
-                      <span className="progress-percent">
-                        {job.state === 'completed' ? <Check size={48} /> : Math.floor(job.percent)}
-                        {job.state !== 'completed' && <small>%</small>}
-                      </span>
-                      <span className="eyebrow">{job.state === 'completed' ? 'COMPLETE' : 'ESTIMATED'}</span>
-                    </div>
+                <div
+                  className={`progress-ring ${terminal.includes(job.state) ? 'settled' : ''}`}
+                  style={{ '--progress': `${job.percent * 3.6}deg` } as React.CSSProperties}
+                >
+                  <div>
+                    <span className="progress-percent">
+                      {job.state === 'completed' ? <Check size={48} /> : Math.floor(job.percent)}
+                      {job.state !== 'completed' && <small>%</small>}
+                    </span>
+                    <span className="eyebrow">{job.state === 'completed' ? 'COMPLETE' : 'ESTIMATED'}</span>
                   </div>
-                )}
-                <h1>
+                </div>
+                <h1 aria-live="polite">
                   {job.state === 'completed'
                     ? '観測の準備ができました。'
                     : job.state === 'failed'
@@ -296,12 +292,14 @@ export default function App() {
                       : job.state === 'cancelled'
                         ? '解析を中止しました。'
                         : job.state === 'loading_runtime'
-                          ? '解析の準備をしています。'
+                          ? '解析エンジンを準備しています…'
                           : 'ことばの変化を、記録しています。'}
                 </h1>
-                <p className="progress-detail" aria-live="polite">
-                  {job.error || job.detail}
-                </p>
+                {(job.state !== 'loading_runtime' || job.error) && (
+                  <p className="progress-detail" aria-live="polite">
+                    {job.error || job.detail}
+                  </p>
+                )}
                 {job.created_at && (
                   <p className="subtle-note">
                     経過 {Math.max(0, Math.floor(job.elapsed_seconds ?? clock / 1000 - job.created_at))} 秒 ·
